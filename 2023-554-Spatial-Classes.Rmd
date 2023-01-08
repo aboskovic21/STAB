@@ -128,34 +128,26 @@ data(Snow.streets)
 # data(Snow.polygons)
 ```
 
-We first create a ``SpatialLines`` object containing the coordinates of the streets using  the  ``Lines`` function 
+We first create a ``st_multilinestring`` object containing the coordinates of the streets: 
 
 ```{r}
 # Streets
 slist <- split(Snow.streets[,c("x","y")],
-            as.factor(Snow.streets[,"street"]))
-Ll1 <- lapply(slist,Line)
-Lsl1 <- Lines(Ll1,"Street") 
-Snow.streets.sp <- SpatialLines(list(Lsl1))
-m <- st_as_sf(Snow.streets.sp)
+               as.factor(Snow.streets[,"street"]))
+slist <- lapply(slist, as.matrix)
+m <- st_multilinestring(slist)
 plot(m)
 ```
 
-Display the streets and then add the deaths and pumps (with labels).
-
-The red squares are deaths, blue triangles are pumps
+Display the streets and then add the deaths and pumps (with labels). The red squares are deaths, blue triangles are pumps
  
 ```{r, fig.height=5}
 plot(m, col="gray")
- # deaths
-Snow.deaths.sp = SpatialPoints(Snow.deaths[,c("x","y")])
-p <- st_as_sf(Snow.deaths.sp)
+# deaths
+p <- st_as_sf(Snow.deaths[,c("x","y")], coords = c("x", "y"))
 plot(p, add=TRUE, col ='red', pch=15, cex=0.6)
 # pumps
-spp <- SpatialPoints(Snow.pumps[,c("x","y")])
-Snow.pumps.sp <- 
-   SpatialPointsDataFrame(spp,Snow.pumps[,c("x","y")])
-spp <- st_as_sf(Snow.pumps.sp)
+spp <- st_as_sf(Snow.pumps[,c("x","y")], coords = c("x", "y"))
 plot(spp, add=TRUE, col='blue', pch=17, cex=1.0)
 text(Snow.pumps[,c("x","y")], labels=Snow.pumps$label, 
        pos=1, cex=0.8)
@@ -187,7 +179,6 @@ First load the libraries.
 ```{r}
 library(maps)
 library(shapefiles)
-library(maptools)
 ```
 
 Note that there are problems with the files, which are sorted by using the ``repair=T`` argument.
@@ -197,12 +188,10 @@ The data can be downloaded from here:
 
 
 ```{r}
-library(rgdal) # for readOGR
-library(spdep) # for poly2nb and nb2inla
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.shp",destfile = "wacounty.shp")
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.shx",destfile = "wacounty.shx")
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.dbf",destfile = "wacounty.dbf")
-wacounty=readOGR(dsn=".",layer = "wacounty")
+wacounty = st_read(dsn=".",layer = "wacounty")
 class(wacounty)
 ```
 
@@ -212,11 +201,7 @@ Let's see what these variables look like: we see county names and FIPS codes.
 names(wacounty)
 wacounty$AreaName[1:3] 
 wacounty$AreaKey[1:3] 
-head(wacounty)
-```
-
-```{r }
-head(wacounty@data)
+# head(wacounty)
 ```
 
 ### Drawing a map
@@ -233,6 +218,23 @@ wacounty$TotPop90[1:3]
 We look at some variables, and then set up the colors to map. We map 1990 Washington population counts by census tracts.
 
 ```{r}
+## Function to make the legend 
+## Adapted from maptools::leglabs()
+make_legend <- function (vec, under = "under", over = "over", between = "-") 
+{
+  x <- vec
+  lx <- length(x)
+  res <- character(lx - 1)
+  res[1] <- paste(under, x[2])
+  for (i in 2:(lx - 2)) res[i] <- paste(x[i], between, x[i + 
+    1])
+  res[lx - 1] <- paste(over, x[lx - 1])
+  res
+}
+```
+
+
+```{r}
 plotvar <- wacounty$TotPop90 # variable we want to map
 summary(plotvar)
 nclr <- 8 # next few lines set up the color scheme for plotting
@@ -241,22 +243,18 @@ brks <- round(quantile(plotvar,probs=seq(0,1,1/(nclr))),digits=1)
 colornum <- findInterval(plotvar,brks,all.inside=T)
 colcode <- plotclr[colornum]
 plot(wacounty,col=colcode)
-legend(-119,46,legend=leglabs(round(brks,digits=1)),fill=plotclr,cex=0.35,bty="n")
+legend("bottomright", legend=make_legend(round(brks, digits = 1)),
+       fill=plotclr,cex=0.35,bty="n")
 ```
 
 In ggplot:
 
 ```{r}
-wacounty_fort <- fortify(wacounty, region = "AreaKey")
-# cbind in plotvar and colcode
-temp_df <- data.frame(id = wacounty$AreaKey, plotvar = wacounty$TotPop90, colcode = colcode)
-wacounty_fort <- left_join(wacounty_fort, temp_df)
-
-ggplot() +
-  geom_polygon(data = wacounty_fort, aes(x = long, y = lat, group = id, fill = colcode), col = "black") +
-  scale_fill_manual(values = rev(plotclr), labels = rev(leglabs(round(brks,digits=1)))) +
+ggplot(data = wacounty) +
+  geom_sf(aes(fill = colcode)) +
+  scale_fill_manual(values = rev(plotclr), labels = rev(make_legend(round(brks,digits=1)))) +
   theme_bw() +
-  coord_fixed() +
+  coord_sf() +
   xlab("") +
   ylab("") +
   theme(legend.title = element_blank(),
@@ -265,58 +263,6 @@ ggplot() +
         axis.ticks = element_blank(),
         axis.text = element_blank())
 ```
-
-
-As an alternative we can use the ``spplot`` function, which uses lattice (trellis) plot methods for spatial data with attributes. We map the 1990 Washington population counts by county.
-
-```{r, fig.height=5.5}
-spplot(wacounty,zcol="TotPop90")
-```
-
-In ggplot:
-
-```{r}
-ggplot() +
-  geom_polygon(data = wacounty_fort, aes(x = long, y = lat, group = id, fill = plotvar), col = "black") + scale_fill_viridis_b(option = "plasma", n.breaks = 18) + theme_bw() + coord_fixed() + xlab("") + ylab("") +
-  theme(legend.title = element_blank(),
-        panel.grid = element_blank(),
-        panel.border = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank())
-```
-
-
-For illustration, we define our own cutpoints by hand.
-
-```{r,fig.height=5.5,}
-summary(wacounty$TotPop90)
-wacounty$cats <- cut(wacounty$TotPop90,breaks=c(0,17000,39000,100000,1520000),labels=c("<17,000","17,000-39,000","39,000-100,000",">100,000"))
-spplot(wacounty,zcol="cats",
-       col.regions=brewer.pal(4,"Blues"))
-```
-
-In ggplot:
-
-```{r}
-# create variable for which bin a county falls in
-wacounty_fort$col_discrete <- factor(ifelse(wacounty_fort$plotvar < 17000, "<17,000",
-       ifelse(wacounty_fort$plotvar < 39000, "17,000-39,000",
-    ifelse(wacounty_fort$plotvar < 100000, "39,000-100,000",">100,000"))), levels=c("<17,000","17,000-39,000","39,000-100,000",">100,000"))
-ggplot() +
-  geom_polygon(data = wacounty_fort, aes(x = long, y = lat, group = id, 
-  fill =col_discrete), col = "black") +
-  theme_bw() +
-  coord_fixed() +
-  xlab("") +
-  ylab("") +
-  theme(legend.title = element_blank(),
-        panel.grid = element_blank(),
-        panel.border = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank()) +
-  scale_fill_manual(values = (brewer.pal(4,"Blues")))
-```
-
 
 We now highlight a county
 
@@ -324,42 +270,45 @@ We now highlight a county
 # identify counties of interest
 xx=which(wacounty$CNTY==33)
 xx2=which(wacounty$CNTY==63)
-# plot the whole state
-plot(wacounty, border="#00000075")
+
+# plot the whole sate
+plot(wacounty$geometry)
+
 # highlight counties of interest
-plot(wacounty[xx, ], col="#ff000075", add=T)
-plot(wacounty[xx2, ], col=NA, border="#0000ff75", add=T, lwd=2.5)
+plot(wacounty[xx, ]$geometry, col="#ff000075", add=T)
+plot(wacounty[xx2, ]$geometry, col=NA, border="#0000ff75", add=T, lwd=2.5)
 
 # Add some labels
-text(coordinates(wacounty[xx, ]), "King", cex=0.75, pos=3, offset=0.25)
-text(coordinates(wacounty[xx2, ]), "Spokane", cex=0.7, pos=1, offset=0.25)
-points(coordinates(wacounty[c(xx, xx2), ]), pch=16, cex=0.75)
+text(sf::st_coordinates(sf::st_centroid(wacounty[xx,]$geometry)),
+     "King", cex=0.75, pos=3, offset=0.25, col = "red")
+text(sf::st_coordinates(sf::st_centroid(wacounty[xx2,]$geometry)),
+     "Spokane", cex=0.75, pos=3, offset=0.25, col = "blue")
+points(sf::st_coordinates(sf::st_centroid(wacounty[c(xx, xx2),]$geometry)),
+       cex=0.75, pch=16)
 ```
 
 Now let's repeat for census tracts.
 
 ```{r}
 ## Reading Shapefiles
-library(rgdal) # for readOGR
-library(spdep) # for poly2nb and nb2inla
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/watract.shp",destfile = "watract.shp")
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/watract.shx",destfile = "watract.shx")
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/watract.dbf",destfile = "watract.dbf")
-watract=readOGR(dsn=".",layer = "watract")
+watract=st_read(dsn=".",layer = "watract")
 ```
 
 Drawing a census tract map: we repeat but now map populations at the census tract level.
 
 ```{r, fig.height=5.5}
-watract <- readShapePoly(fn="watract",proj4string=
- CRS("+proj=longlat"),repair=T) # 
+# column names
 names(watract)
+
 plotvar <- watract$TotPop90 # variable we want to map
 brks <- round(quantile(plotvar,probs=seq(0,1,1/(nclr))),digits=1)
 colornum <- findInterval(plotvar,brks,all.inside=T)
 colcode <- plotclr[colornum]
 plot(watract,col=colcode)
-legend(-119,46,legend=leglabs(round(brks,digits=1)),
+legend("bottomright", legend=make_legend(round(brks,digits=1)),
          fill=plotclr,cex=0.4,bty="n")
 ```
 
@@ -368,35 +317,29 @@ We zoom in on King County
 ```{r, fig.height=5.5}
 xx=which(watract$CNTY==33)
 plot(watract[xx,], col=colcode[xx])
-legend("bottomleft",legend=leglabs(round(brks,digits=1)),
+legend("bottomright",legend=make_legend(round(brks,digits=1)),
          fill=plotclr,cex=0.4,bty="n")
 ```
-
 
 A county map of North Carolina with text
 
 ```{r,fig.height=5.5}
-library(ggplot2)  # For map_data. It's just a wrapper; should just use maps.
-library(sp)
-library(maps)
-getLabelPoint <- # Returns a county-named list of label points
-function(county) {Polygon(county[c('long', 'lat')])@labpt}
-df <- map_data('county', 'north carolina')  # NC region county data
-centroids <- by(df, df$subregion, getLabelPoint)    # Returns list
-centroids <- do.call("rbind.data.frame", centroids) # Convert to Data Frame
-names(centroids) <- c('long', 'lat') # Appropriate Header
-map('county', 'north carolina')
-text(centroids$long, centroids$lat, rownames(centroids), offset=0, cex=0.4)
+nc <- read_sf(system.file("gpkg/nc.gpkg", package = "sf"))
+plot(nc["BIR74"]$geom)
+text(sf::st_coordinates(st_centroid(nc["BIR74"]$geom)), rownames(nc), cex=0.4, offset=0)
 ```
 
 In ggplot:
 
 ```{r}
+centroids <- sf::st_coordinates(st_centroid(nc["BIR74"]$geom))
+
 ggplot() +
-  geom_polygon(data = df, aes(x = long, y = lat, group = group), fill = "NA", col = "black") +
-  geom_text(aes(x = centroids[,1], y = centroids[,2], label = 1:100), size = 2) +
+  geom_sf(data = nc, col = "black", fill = NA) +
+  geom_text(aes(x = centroids[ , 1], y = centroids[ , 2], 
+                label = 1:100), size = 2) +
   theme_bw() +
-  coord_fixed() +
+  coord_sf() +
   xlab("") +
   ylab("") +
   theme(legend.title = element_blank(),
@@ -405,22 +348,5 @@ ggplot() +
         axis.ticks = element_blank(),
         axis.text = element_blank())
 ```
-
-Below is a map using ``sf``. It maps the variable ``BIR74`` which is the number of births in 1974, by counties in North Carolina.
-
-```{r}
-library(tidyverse)
-library(sf)
-system.file("gpkg/nc.gpkg", package = "sf") %>%
-    read_sf() -> nc
-nc.32119 <- st_transform(nc, 'EPSG:32119')
-nc.32119 %>%
-    select(BIR74) %>%
-    plot(graticule = TRUE, axes = TRUE)
-```
-
-
-
-
 
 
