@@ -60,53 +60,49 @@ We form a data frame ``scotdata`` containing key variables, and add the SMRs.
 ```{r}
 scotdata <- scotland$data[,c("county.names", "cases", "expected", "AFF")]
 scotdata$SMR <- scotdata$cases/scotdata$expected
-smap <- scotland$spatial.polygon
+smap <- (scotland$spatial.polygon)
 ```
 
-We use the ``sapply()`` function to see that the polygone ``ID`` slot corresponds to the county names.
-
-Then create a polygon ``SpatialPolygonsDataFrame``, which allows mapping.
+We can use ``sapply()`` to see that the polygone ``ID`` slot corresponds to the county names, meaning that polygons and attribute records are in the same order:
 
 ```{r}
-sapply(slot(smap, "polygons"), function(x){slot(x, "ID")})
+all.equal(
+  sapply(slot(smap, "polygons"), function(x){slot(x, "ID")}),
+  row.names(scotdata)
+)
 ```
 
-We now create a ``SpatialPolygonsDataFrame`` by combining ``smap`` and ``scotdata``.
-
-We first create row names for ``scotdata`` by setting equal to the county names, and then we match on these row names (``match.ID=TRUE``).
-
+We can convert `smap` to an `sfc` object, and add it as geometry column to the data.frame, then convert into an `sf` object:
 ```{r}
-rownames(scotdata) <- scotdata$county
-smap <- SpatialPolygonsDataFrame(smap, scotdata, match.ID = TRUE)
+scotdata$geometry <- st_as_sfc(smap)
+smap <- st_as_sf(scotdata)
 ```
-
 
 We can look at the first part of the spatial data frame:
 
 ```{r}
-head(smap@data)
+head(smap)
 ```
 
 Now for the map.
 
 ```{r, echo=TRUE, fig.height=4.5,fig.width=4, fig.cap="SMRs for Scottish lip cancer data",eval=T}
-spplot(smap,zcol="SMR",col.regions=brewer.pal(9,"Purples"),cuts=8)
+pal = function(n) brewer.pal(n, "Purples")
+plot(smap["SMR"], pal = pal, nbreaks = 8)
 ```
 
 Observations:
 
 * The SMRs have a large spread, but how much does this reflect sampling variation, rather than true variation? 
 
-* There is also
-increasing trend in the south-north direction. 
-
+* There is also increasing trend in the south-north direction. 
 
 The variance of the
 estimate in area $i$ is $${\mbox{var}}(\mbox{SMR}_i) = \frac{\mbox{SMR}_i}{E_i},$$ which
 will be large if $E_i$ is small. 
 
 ```{r}
-summary(smap@data$expected)
+summary(smap$expected)
 ```
 
 For the Scottish data the
@@ -122,7 +118,8 @@ We next map the expected numbers for Scottish lip cancer data
 
 
 ```{r, echo=TRUE, fig.height=4.5,fig.width=4, tidy.opts=list(width.cutoff=90),eval=T}
-spplot(smap,zcol="expected",col.regions=brewer.pal(9,"Greens"),cuts=8)
+pal = function(n) brewer.pal(n, "Greens")
+plot(smap["expected"], pal = pal, nbreaks = 8, breaks = "equal")
 ```
 
 The highest SMRs tend to have the largest standard errors.
@@ -186,23 +183,27 @@ scotdata$Estar <- Estar
 scotdata$SMRlower <- SMRlower
 scotdata$SMRupper <- SMRupper
 scotdata$SMRwidth <- SMRwidth
-smap <- SpatialPolygonsDataFrame(smap, scotdata, match.ID = TRUE)
+geometries = st_geometry(smap)
+smap = scotdata
+smap$geometries = geometries
+smap = st_as_sf(smap)
 ```
 
 Point estimates with adjustment
 
 ```{r}
-spplot(smap,zcol="SMRstar",col.regions=brewer.pal(9,"Greys"),cuts=8)
+pal = function(n) brewer.pal(n,"Greys")
+plot(smap["SMRstar"],pal = pal, nbreaks = 8, breaks = "equal")
 ```
 
 Lower and upper confidence intervals with adjustment.
 
 ```{r}
-spplot(smap,zcol="SMRlower",col.regions=brewer.pal(9,"YlOrBr"),cuts=8)
-spplot(smap,zcol="SMRupper",col.regions=brewer.pal(9,"GnBu"),cuts=8)
+pal = function(n) brewer.pal(n, "YlOrBr")
+plot(smap["SMRlower"], pal = pal, nbreaks = 8, breaks = "equal")
+pal = function(n) brewer.pal(n, "GnBu")
+plot(smap["SMRupper"], pal=pal, nbreaks = 8, breaks = "equal")
 ```
-
-
 
 The width decreases with increasing expected numbers!
 
@@ -241,7 +242,7 @@ We first show a fit with no prior specifications given.
 ```{r,eval=T}
 # Fit Poisson-lognormal model in INLA:
 scotland.fit0 <- inla(Counts ~ 1 + f(Region, model="iid"),
-data=Scotland, family="poisson", E=E)
+  data=Scotland, family="poisson", E=E)
 scotland.fit0$summary.fixed[,1:5]
 scotland.fit0$summary.hyper[,1:5]
 ```
@@ -264,10 +265,10 @@ Note:
 # Fit Poisson-lognormal model in INLA with prior specified
 pcprec <- list(theta=list(prior='pc.prec',param=c(1,.05)))
 scotland.fit1 <- inla(Counts ~ 1 + f(Region, model="iid", hyper=pcprec),
-data=Scotland, family="poisson", E=E,
-# Next two lines give us calculated fitted values
-control.predictor = list(compute = TRUE),
-control.compute = list(return.marginals.predictor = TRUE)) 
+  data=Scotland, family="poisson", E=E,
+  # Next two lines give us calculated fitted values
+  control.predictor = list(compute = TRUE),
+  control.compute = list(return.marginals.predictor = TRUE)) 
 
 scotland.fit1$summary.fixed[,1:5]
 scotland.fit1$summary.hyper[,1:5]
@@ -286,9 +287,9 @@ We now extract the posterior medians of the log relative risks.
 We now map the posterior medians of the relative risks.
 
 ```{r,  fig.height=4.5}
-scotdata$fit1fitted <- scotland.fit1$summary.fitted.values$`0.5quant`
-smap <- SpatialPolygonsDataFrame(smap,scotdata,match.ID = TRUE)
-spplot(smap,zcol="fit1fitted",col.regions=brewer.pal(9,"Purples"),cuts=8)
+smap$fit1fitted <- scotland.fit1$summary.fitted.values$`0.5quant`
+pal = function(n) brewer.pal(n,"Purples")
+plot(smap["fit1fitted"], pal = pal, nbreaks = 8, breaks = "equal")
 ```
 
 Now compare the medians with the SMRs - we see some shinrkage, particularly for the low and high SMRs that have relatively large standard errors.
@@ -545,9 +546,8 @@ The posterior median for the proportion of the residual variation that is spatia
 
 
 ```{r,  fig.height=4.5,fig.width=4.5,eval=T}
-scotdata$fit2fitted <- scotland.fit2$summary.fitted.values$`0.5quant`
-smap <- SpatialPolygonsDataFrame(smap,scotdata,match.ID = TRUE)
-spplot(smap,zcol="fit2fitted",col.regions=brewer.pal(9,"Purples"),cuts=8)
+smap$fit2fitted <- scotland.fit2$summary.fitted.values$`0.5quant`
+plot(smap["fit2fitted"], pal = pal, nbreaks=8, breaks = "equal")
 ```
 
 
@@ -592,14 +592,15 @@ scotdata$REsspat <- struct
 
 Non-spatial random effects:
 ```{r,fig.height=4,fig.width=5,eval=T}
-smap <- SpatialPolygonsDataFrame(smap,scotdata,match.ID = TRUE)
-spplot(smap,zcol="REsnonspat",col.regions=brewer.pal(9,"Reds"),cuts=8)
+smap$REsnonspat = scotdata$REsnonspat 
+pal = function(n) brewer.pal(n,"Reds")
+plot(smap["REsnonspat"],pal = pal,nbreaks =8, breaks = "equal")
 ```
 
 Spatial random effects:
 ```{r,fig.height=4,fig.width=5,eval=T}
-smap <- SpatialPolygonsDataFrame(smap,scotdata,match.ID = TRUE)
-spplot(smap,zcol="REsspat",col.regions=brewer.pal(9,"Reds"),cuts=8)
+smap$REsspat = scotdata$REsspat
+plot(smap["REsspat"], pal = pal, nbreaks=8, breaks = "equal")
 ```
 
 ## Exceedance probabilities
@@ -614,7 +615,7 @@ for $i=1,\dots,56$.
 exc <- sapply( scotland.fit2$marginals.fitted.values,
 FUN = function(marg){1 - inla.pmarginal(q = 2, marginal = marg)})
 smap$exc <- exc
-spplot(smap,zcol="exc",col.regions=brewer.pal(9,"Reds"),cuts=8)
+plot(smap["exc"],pal = pal, nbreaks = 8, breaks = "equal")
 ```
 
 ## Spatial model: confounding by location
@@ -657,12 +658,12 @@ The code below creates a neighborhood file for INLA that looks like:
 ### Creating an INLA graph file from a shapefile
 
 ```{r,eval=TRUE}
-library(rgdal) # for readOGR
 library(spdep) # for poly2nb and nb2inla
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.shp",destfile = "wacounty.shp")
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.shx",destfile = "wacounty.shx")
 download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.dbf",destfile = "wacounty.dbf")
-countymap=readOGR(dsn=".",layer = "wacounty")
+countymap=st_read(dsn=".",layer = "wacounty")
+countymap = countymap[!st_is_empty(countymap),]
 nb.map <- poly2nb(countymap)
 nb2INLA("wacounty.graph",nb.map)
 ```
