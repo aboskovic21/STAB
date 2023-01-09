@@ -1,0 +1,13 @@
+knitr
+sp
+SpatialEpi
+RColorBrewer
+ggplot2
+ggridges
+Matrix
+foreach
+INLA
+rgdal
+spData
+sf
+spdep

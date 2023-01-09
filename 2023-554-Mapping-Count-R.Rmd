@@ -1,5 +1,5 @@
 ---
-title: "2022 555 Disease Mapping R Notes"
+title: "2023 554 Disease Mapping R Notes"
 author: |
   | Jon Wakefield
   | Departments of Biostatistics and Statistics
