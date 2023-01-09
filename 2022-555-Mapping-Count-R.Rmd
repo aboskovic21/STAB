@@ -265,8 +265,10 @@ Note:
 pcprec <- list(theta=list(prior='pc.prec',param=c(1,.05)))
 scotland.fit1 <- inla(Counts ~ 1 + f(Region, model="iid", hyper=pcprec),
 data=Scotland, family="poisson", E=E,
-# Next part calculates fitted values
-control.predictor = list(compute = TRUE)) 
+# Next two lines give us calculated fitted values
+control.predictor = list(compute = TRUE),
+control.compute = list(return.marginals.predictor = TRUE)) 
+
 scotland.fit1$summary.fixed[,1:5]
 scotland.fit1$summary.hyper[,1:5]
 ```
@@ -526,8 +528,10 @@ f(Region, model="bym2",graph="scotland.graph",
     param=c(0.5/0.31,0.01),
     initial=5)))
 scotland.fit2 <- inla(formula, data=Scotland, 
-family="poisson",E=E,control.predictor=list(compute=TRUE),
-control.compute=list(config = TRUE))
+family="poisson",E=E,
+control.predictor=list(compute=TRUE),
+control.compute=list(return.marginals.predictor=TRUE, config = TRUE))
+
 scotland.fit2$summary.fixed[,1:5]
 scotland.fit2$summary.hyper[,1:5]
 ```
