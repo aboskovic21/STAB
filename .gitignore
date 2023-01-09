@@ -1,0 +1,7 @@
+*.dbf
+*.graph
+*.shp
+*.shx
+*R_chache
+*R_files
+.DS_Store
