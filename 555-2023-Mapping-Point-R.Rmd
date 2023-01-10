@@ -1,0 +1,923 @@
+---
+title: "2022 555 R Notes on Mapping for Point Data"
+author: |
+  | Jon Wakefield
+  | Departments of Biostatistics and Statistics
+  | University of Washington
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+  ioslides_presentation: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+opts_chunk$set(collapse=TRUE, fig.align='center', tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=80,strip.white=TRUE), warning=FALSE,message=FALSE,cache=TRUE)
+```
+## Overview
+
+In these notes we will consider mapping and modeling of point data in which the (nominal) exact locations are known.
+
+We will look at 
+
+- continuous responses via mixed (geostatistical) models, 
+
+
+
+
+## Continuous responses: example 
+
+We illustrate methods for continuous data using on Zinc levels in the Netherlands.
+
+This data set gives locations and top soil heavy metal concentrations
+(in ppm), along with a number of soil and landscape variables,
+collected in a flood plain of the river Meuse, near the village Stein in the South of the Netherlands.
+
+Heavy metal concentrations are bulk sampled from an area of
+approximately $28 \mbox{km} \times 39 \mbox{km}$.
+
+The Meuse data are in a variety of packages. The version in the ``geoR`` library are not a spatial object, but can be used with likelihood and Bayes methods.
+
+## geoR for geostatistics
+
+
+We start the analysis using functions from the ``geoR`` library, for which a ``geodata`` data type is required.
+
+\small
+```{r makedata, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=40),eval=T}
+library(geoR)
+library(sp)
+data("meuse")
+zmat <- matrix(cbind(meuse$x,meuse$y,log(meuse$zinc)),
+                 ncol=3,nrow=155,byrow=F) 
+geozinc <- as.geodata(zmat,coords.col=c(1,2),data.col=c(3))
+```
+
+There are `r dim(meuse)[1]` observations (sampling locations)
+
+## Zinc data
+
+We work with log(zinc) as the distribution is more symmetric than on the original scale, and the variance more constant across levels of covariates.
+\small
+```{r zinchist,collapse=TRUE, fig.height=3.0,fig.width=4.7,echo=TRUE,eval=T}
+hist(log(meuse$zinc),main="",xlab ="log(zinc)")
+```
+
+## log(zinc) versus distance from river and elevation
+
+\small
+```{r plots1,collapse=TRUE, fig.height=3.0,fig.width=4.7,echo=TRUE,eval=T}
+par(mfrow=c(1,2))
+plot(log(meuse$zinc)~meuse$dist,ylab="log(zinc)",xlab="Scaled distance",col="blue")
+plot(log(meuse$zinc)~meuse$elev,ylab="log(zinc)",xlab="Elevation",col="blue")
+```
+
+## log(zinc): Variogram cloud, constant mean
+
+\small
+```{r vario1,collapse=TRUE, fig.height=3.0,fig.width=4.7,echo=TRUE,eval=T,results="hide"}
+cloudzinc <- variog(geozinc,option="cloud")
+plot(cloudzinc,ylab="Semi-variance",xlab="Distance (m)",col="grey",cex=.4)
+```
+
+## log(zinc): Binned variogram with linear trend in distance and elevation
+
+\small
+```{r vario2,collapse=TRUE, fig.height=3.0,fig.width=4.7,echo=TRUE,eval=T,results="hide"}
+binzinc <- variog(geozinc,uvec=seq(0,5000,250),
+           trend=~meuse$dist+meuse$elev)
+plot(binzinc,ylab="Semi-variance",xlab="Distance (m)",cex=.5,col="blue")
+```
+
+
+## log(zinc): Monte Carlo envelopes under no spatial dependence: clear there is dependence here
+
+\small
+```{r vario3,collapse=TRUE, fig.height=3.0,fig.width=4.7,echo=TRUE,eval=T,results="hide"}
+geozinc.env <- variog.mc.env(geozinc,obj=binzinc)
+plot(binzinc,env=geozinc.env,xlab="Distance (m)",ylab="Semi-variance")
+```
+
+## Parameter estimation from the variogram
+
+We now estimate the parameters of the exponential covariance model which in ``geoR`` is parameterized as
+$$\tau^2 + \sigma^2 \exp (-d/\phi),$$
+where $d$ is the distance between the points, $\sigma^2$ is the partial sill and $\tau^2$ is the nugget.
+
+The effective range is the distance at which the correlation is 0.05, and if we have a rough estimate of this $\tilde{d}$ (from the binned variogram, for example) then we can solve for an initial estimate $\tilde{\phi} = -\tilde{d}/log(0.05)$.
+
+Rather than specify a distribution for the data, we can initially estimate the parameters from the sample (binned) variogram.
+
+We illustrate this using OLS and WLS.
+
+## Parameter estimation from the binned variogram
+
+We have a non-linear least squares problem, we give initial estimates for $\sigma^2$ and $\phi$. From the binned variogram, estimate $\tilde{d}=800$ to give $\tilde{\phi}=267$.
+
+\scriptsize
+```{r vario4, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+olsfit <- variofit(binzinc,ini=c(.2,267),weights="equal")
+olsfit
+```
+
+## Parameter estimation from the variogram: WLS
+
+The default is to weight by the number of pairs in each bin, though other options are available.
+
+\scriptsize
+```{r vario5, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+wlsfit <- variofit(binzinc,ini=c(.2,500))
+wlsfit
+```
+
+## Maximum likelihood for log(zinc)
+
+We suppress the output from the call.
+\small
+```{r mle, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T,results="hide"}
+mlfit <- likfit(geozinc,ini=c(.2,224),
+         trend=~meuse$dist+meuse$elev)
+```
+
+The results: estimates of $\phi$ and $\tau^2$ are quite different from the LS versions.
+
+```{r mle_out, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+mlfit$parameters.summary
+mlfit$practicalRange
+```
+
+## Restricted maximum likelihood for log(zinc)
+
+\small
+```{r mle2,collapse=TRUE,echo=TRUE,eval=T,results="hide"}
+remlfit <- likfit(geozinc,ini=c(.55,224),lik.method="RML",
+         trend=~meuse$dist+meuse$elev)
+```
+The results: slight differences from ML.
+
+```{r mle_out2, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+remlfit$parameters.summary
+remlfit$practicalRange
+```
+
+## Comparison of estimates
+
+\small
+```{r compare,collapse=TRUE,fig.show="hide",tidy=TRUE,tidy.opts=list(width.cutoff=50),echo=TRUE,eval=T}
+plot(binzinc,max.dist=3000,xlab="Distance (m)",ylab="Semi-variance",pch=19,cex=.6)
+lines(olsfit,max.dist=3000,col="red")
+lines(wlsfit,max.dist=3000,lty=2,col="green")
+lines(mlfit,max.dist=3000,lty=3,col="blue")
+lines(remlfit,max.dist=3000,lty=4,col="black")
+legend("bottomright",legend=c("OLS","WLS","ML","REML"),
+       lty=c(1,2,3,4),bty="n",col=c("red","green","blue","black"),cex=0.5)
+```
+
+## Comparison of estimates
+
+\small
+```{r compare2,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=4.0,fig.width=4.7,echo=FALSE,eval=T}
+plot(binzinc,max.dist=3000,xlab="Distance (m)",ylab="Semi-variance",pch=19,cex=.6)
+lines(olsfit,max.dist=3000,col="red")
+lines(wlsfit,max.dist=3000,lty=2,col="green")
+lines(mlfit,max.dist=3000,lty=3,col="blue")
+lines(remlfit,max.dist=3000,lty=4,col="black")
+legend(1500,.075,legend=c("OLS","WLS","ML","REML"),
+       lty=c(1,2,3,4),bty="n",col=c("red","green","blue","black"),cex=0.5)
+```
+
+
+## Prediction for log(zinc)
+
+We plot the data along with the region within which we shall
+carry out prediction.
+
+\small
+```{r pred1,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+points(geozinc,pt.divide="data.proportional",
+       cex.min=0.05,cex.max=.4,xlab="x-coordinate",ylab="y-coordinate",col="green")
+# See points.geodata description for explanation of this function
+abline(h=330000,lty=2);abline(h=332000,lty=2,col="red")
+abline(v=179000,lty=2);abline(v=181000,lty=2,col="red")
+```
+
+## Prediction for log(zinc)
+
+We plot the data along with the region within which we shall
+carry out prediction.
+
+\small
+```{r pred2,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.7,fig.width=4.5,echo=F,eval=T}
+points(geozinc,pt.divide="data.proportional",
+       cex.min=0.05,cex.max=.4,xlab="x-coordinate",ylab="y-coordinate",col="green")
+# See points.geodata description for explanation of this function
+abline(h=330000,lty=2);abline(h=332000,lty=2,col="red")
+abline(v=179000,lty=2);abline(v=181000,lty=2,col="red")
+```
+
+
+## Prediction for log(zinc)
+
+We fit a linear model in distance and elevation to log(zinc).
+
+We then form a ``geodata`` object with the residuals as the response.
+
+\small
+```{r pred3,collapse=TRUE,echo=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+lmfit <- lm(geozinc$data~meuse$dist+meuse$elev)
+lmfit
+detrend <- as.geodata(cbind(geozinc$coords,lmfit$residuals))
+```
+
+## Prediction for log(zinc)
+
+\scriptsize
+```{r pred4,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.2,fig.width=4.5,echo=TRUE,eval=T}
+points(detrend,pt.divide="rank.prop",xlab="x-coordinate",ylab="y-coordinate",cex.min=.1,cex.max=.5)
+abline(h=330000,lty=2)
+abline(h=332000,lty=2)
+abline(v=179000,lty=2)
+abline(v=181000,lty=2)
+```
+
+
+## Prediction for log(zinc)
+
+Carry out MLE on the detrended data.
+
+\scriptsize
+```{r mle_detrend,collapse=TRUE,echo=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+mlfit2 <- likfit(detrend,ini=c(.2,224))
+mlfit2
+```
+
+
+## Prediction for log(zinc)
+
+We now obtain spatial predictions on a grid, using the parameter estimates from the ML fit to the residuals.
+
+Ordinary Kriging is used for prediction.
+
+\small
+```{r krig,collapse=TRUE,echo=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=40),eval=T}
+pred.grid <- expand.grid(seq(179000,181000,l=51),
+             seq(330000,332000,l=51))
+kc <- krige.conv(detrend,loc=pred.grid,
+      krige=krige.control(obj.m=mlfit2))
+```
+## Prediction for log(zinc)
+
+Produce an image plot of the predictions, with the data superimposed.
+
+\small
+```{r krigplot,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+library(fields)
+image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),
+           z=matrix(kc$predict,nrow=51,ncol=51),col=terrain.colors(100),xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend$coords[,1],detrend$coords[,2],
+  circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
+```
+
+## Prediction for log(zinc)
+
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F,eval=T}
+image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),z=matrix(kc$predict,nrow=51,ncol=51),col=terrain.colors(100),xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend$coords[,1],detrend$coords[,2],
+  circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
+```
+
+## Standard deviations of prediction for log(zinc)
+
+We now plot the Kriging standard deviations of the predictions.
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=T,eval=T}
+image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),z=matrix(sqrt(kc$krige.var),nrow=51,ncol=51),col=cm.colors(100),xlab="x-coordinate",ylab="y-coordinate")
+points(detrend$coords[,1],detrend$coords[,2],pch=16)
+```
+
+The standard deviation is smallest close to the datapoints, as expected.
+
+## Standard deviations of prediction for log(zinc)
+
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F,eval=T}
+image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),z=matrix(sqrt(kc$krige.var),nrow=51,ncol=51),col=cm.colors(100),xlab="x-coordinate",ylab="y-coordinate")
+points(detrend$coords[,1],detrend$coords[,2],cex=.5,pch=16)
+```
+
+## log(zinc) modeled with a GAM
+
+We now model the log(zinc) surface as linear in distance and elevation, and with the spatial surface modeled with a thin plate regression spline, with the smoothing parameter estimated using REML.
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=TRUE,eval=T}
+library(mgcv)
+library(lattice)
+library(latticeExtra)
+library(RColorBrewer)
+
+
+zinc.dat <- data.frame(x=meuse$x, y=meuse$y, lzinc=log(meuse$zinc), dist=meuse$dist, elev=meuse$elev)
+gam.mod <- gam(lzinc ~ s(x,y, bs="tp") + dist + elev, 
+           data=zinc.dat, method="REML")
+```
+
+## log(zinc) modeled with a GAM
+
+
+\scriptsize
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=TRUE,eval=T}
+summary(gam.mod)
+```
+
+## GAM output: The fitted distance by elevation surface
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=4.0,fig.width=4.7,echo=TRUE,eval=T}
+vis.gam(gam.mod,theta=30,phi=30)
+```
+
+
+## GAM prediction
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+# create prediction grid
+pred.grid <- expand.grid(seq(179000,181000,l=51),
+                         seq(330000,332000,l=51))
+pred.dat <- data.frame(x=pred.grid[,1],y=pred.grid[,2], dist=mean(meuse$dist), elev=mean(meuse$elev))
+zinc.pred <- predict.gam(gam.mod, pred.dat,type="terms")[,3]
+# plot the smoother for  log(zinc)
+print(contourplot(zinc.pred~pred.grid[,1]*pred.grid[,2],xlab="",  ylab="", main ="", colorkey=T, scales=list(draw=F),
+      pretty=T, region=T, par.settings=custom.theme(region = 
+      brewer.pal(9, "Greys"),bg = "grey80")))
+# add the observed points
+trellis.focus("panel", 1, 1, highlight=FALSE)
+lpoints(zinc.dat[,1], zinc.dat[,2], pch=19, col="red", cex=.4)
+```
+
+## Prediction from GAM
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.0,fig.width=4.0,echo=FALSE,eval=T}
+# create prediction grid
+pred.grid <- expand.grid(seq(179000,181000,l=51),
+                         seq(330000,332000,l=51))
+pred.dat <- data.frame(x=pred.grid[,1],y=pred.grid[,2],dist=mean(meuse$dist), elev=mean(meuse$elev))
+zinc.pred <- predict.gam(gam.mod, pred.dat,type="terms")[,3]
+# plot the predicted log(zinc)
+print(contourplot(zinc.pred~pred.grid[,1]*pred.grid[,2],xlab="",ylab="", main ="", colorkey=T, scales=list(draw=F),
+      pretty=T, region=T, par.settings=custom.theme(region = 
+      brewer.pal(9, "Greys"),bg = "grey80")))
+# add the observed points
+trellis.focus("panel", 1, 1, highlight=FALSE)
+lpoints(zinc.dat[,1], zinc.dat[,2], pch=19, col="red", cex=.4)
+```
+
+## Meuse analysis using ``geostat`` functions
+
+The ``sp`` package functions 
+can make full use of the GIS capabilities of R more readily.
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=T,eval=T}
+rm(list=ls())
+
+pal <-  function(n = 9){ brewer.pal(n, "Reds") }
+
+data(meuse)
+coords <- SpatialPoints(meuse[,c("x","y")])
+meuse1 <- SpatialPointsDataFrame(coords,meuse)
+data(meuse.riv)
+river_polygon <- Polygons(list(Polygon(meuse.riv)),ID="meuse")
+rivers <- SpatialPolygons(list(river_polygon))
+coordinates(meuse) = ~x+y
+```
+
+## Zinc: Sampling locations 
+
+\small
+```{r,collapse=TRUE, fig.height=4.0,fig.width=3.7,echo=T,eval=T}
+plot(meuse1,axes=T)
+plot(rivers,add=T)
+```
+
+## log(zinc): Variogram cloud, no trend removed
+
+\small
+```{r,collapse=TRUE, fig.height=2.5,fig.width=4,echo=T,eval=T}
+library(gstat)
+cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
+plot(cld,ylab="Semi-variance",xlab="Distance (m)")
+```
+
+
+## More variograms, with sample sizes
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
+svgm <- variogram(log(zinc) ~ 1, meuse)
+d <- data.frame(gamma = c(cld$gamma, svgm$gamma),
+    dist = c(cld$dist, svgm$dist),
+    id = c(rep("cloud", nrow(cld)), rep("sample variogram", nrow(svgm)))
+    )
+xyplot(gamma ~ dist | id, d,
+    scales = list(y = list(relation = "free", 
+	  #ylim = list(NULL, c(-.005,0.7)))),
+	  limits = list(NULL, c(-.005,0.7)))),
+    layout = c(1, 2), as.table = TRUE,
+    panel = function(x,y, ...) {
+        if (panel.number() == 2)
+            ltext(x+10, y, svgm$np, adj = c(0,0.5),cex=.4) #$
+        panel.xyplot(x,y,...)
+    },
+    xlim = c(0, 1590),
+    cex = .5, pch = 3
+)
+```
+
+## More variograms
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.0,fig.width=4.0,echo=FALSE,eval=T}
+cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
+svgm <- variogram(log(zinc) ~ 1, meuse)
+d <- data.frame(gamma = c(cld$gamma, svgm$gamma),
+    dist = c(cld$dist, svgm$dist),
+    id = c(rep("cloud", nrow(cld)), rep("sample variogram", nrow(svgm)))
+    )
+xyplot(gamma ~ dist | id, d,
+    scales = list(y = list(relation = "free", 
+	  #ylim = list(NULL, c(-.005,0.7)))),
+	  limits = list(NULL, c(-.005,0.7)))),
+    layout = c(1, 2), as.table = TRUE,
+    panel = function(x,y, ...) {
+        if (panel.number() == 2)
+            ltext(x+10, y, svgm$np, adj = c(0,0.5),cex=.4) #$
+        panel.xyplot(x,y,...)
+    },
+    xlim = c(0, 1590),
+    cex = .5, pch = 3
+)
+```
+
+## Monte Carlo simulations of semi-variogram 
+
+We simulate 100 datasets with random relabeling of points, and then form variograms for each.
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+v <- variogram(log(zinc) ~ 1, meuse)
+plot(v, type = 'b', pch = 3,xlab="Distance (m)",ylab="Semi-variance")
+fn = function(n = 100) {
+        for (i in 1:n) {
+           meuse$random = sample(meuse$zinc)
+           v = variogram(log(random) ~ 1, meuse)
+           trellis.focus("panel", 1, 1, highlight = FALSE)
+           llines(v$dist, v$gamma, col = 'grey')
+           trellis.unfocus()
+        }
+}
+fn()
+```
+
+## Monte Carlo simulations of semi-variogram 
+
+\small
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.0,fig.width=4.0,echo=FALSE,eval=T}
+v <- variogram(log(zinc) ~ 1, meuse)
+plot(v, type = 'b', pch = 3,xlab="Distance (m)",ylab="Semi-variogram")
+fn = function(n = 100) {
+        for (i in 1:n) {
+           meuse$random = sample(meuse$zinc)
+           v = variogram(log(random) ~ 1, meuse)
+           trellis.focus("panel", 1, 1, highlight = FALSE)
+           llines(v$dist, v$gamma, col = 'grey')
+           trellis.unfocus()
+        }
+}
+fn()
+```
+
+## log(zinc): Variogram cloud, detrended
+
+\small
+```{r,collapse=TRUE, fig.height=2.5,fig.width=4,echo=T,eval=T}
+cld2 <- variogram(log(zinc) ~ dist+elev, meuse, cloud = TRUE)
+plot(cld2,ylab="Semi-variance",xlab="Distance (m)")
+```
+
+## log(zinc): Binned variogram, detrended
+
+\small
+```{r,collapse=TRUE, fig.height=2.5,fig.width=4,echo=T,eval=T}
+gstatbin <- variogram(log(zinc) ~ dist+elev, meuse, width=200)
+plot(gstatbin,ylab="Semi-variance",xlab="Distance (m)")
+```
+
+## Zinc: Directional variogram with linear trend removed
+
+We form 4 variograms with data taken from different directions, with 0 and 90 corresponding to north and east, respectively.
+
+Note that 0 is the same as 180.
+\small
+```{r,collapse=TRUE,echo=T,eval=T}
+dircld <- variogram(log(zinc)~dist+elev, meuse, alpha=c(0,45,90,135))
+```
+
+## Zinc: Directional variogram with linear trend removed
+
+\small
+```{r,collapse=TRUE, fig.height=2.8,fig.width=4,echo=T,eval=T}
+plot(dircld,xlab="Distance (m)",ylab="Semi-variance")
+```
+
+## Zinc: Lagged scatterplots
+
+We examine scatterplots of points within different distances of each other. This is another way of assessing whether spatial dependence exists.
+
+\small
+```{r,collapse=TRUE, fig.show="hide",echo=T,eval=T}
+hscat(log(zinc)~1, meuse, c(0, 80, 120, 250, 500, 1000),cex=.1)
+```
+
+
+## 
+
+
+\small
+```{r,collapse=TRUE, fig.height=3.8,fig.width=4,echo=F,eval=T}
+hscat(log(zinc)~1, meuse, c(0, 80, 120, 250, 500, 1000),cex=.1)
+```
+
+## Quick Bayesian analysis (Brown 2014)
+
+Fit a multivariate spatial Matern model to the residuals (just to show we can!)
+
+Model is fitted by discretizing space over a grid.
+
+Priors need more thought here
+
+## Quick Bayesian analysis (Brown 2014)
+
+
+\small
+```{r,collapse=TRUE, fig.show="hide",echo=T,eval=T}
+library(geostatsp)
+
+coord <- matrix(c(meuse$x,meuse$y),ncol=2)
+lzinc <- log(meuse$zinc)
+elev <- meuse$elev
+dist <- meuse$dist
+dfmeuse <- data.frame(lzinc,elev,dist)
+data.spdf <- SpatialPointsDataFrame(coords=coord,data=dfmeuse)
+formula <- lzinc ~  elev+dist
+zincglgm <- glgm(formula,grid=30,shape=1,family="gaussian",buffer=200,data=data.spdf,priorCI=list(c(sd=0.1,1),range=c(100,1200)))
+zincglgm$parameters$summary
+```
+
+## Other capabilities in ``gstat``
+
+See 
+
+- ``fit.variogram`` for estimation from the variogram
+
+- ``krige`` (and associated functions) for Kriging, 
+
+- ``vgm`` generates variogram models
+
+## Binary point data: Cross-sectional asthma survey
+
+We first consider  data that were analyzed by Diggle and Rowlingson (1994). Ten schools were surveyed within the North Derbyshire and parents answered a question, ``has the child ever suffered from asthma".
+
+A number of household and child-level variables were also collected.
+
+The following example leans heavily on an analysis carried out in Bivand et al (2013, Chapter 7).
+
+We first load some libraries.
+
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+library(rgdal)
+library(maptools)
+library(splancs)
+library(spatstat)
+```
+
+## Binary point data: Cross-sectional asthma survey
+
+The file names in quotes need to be in the current directory: we load data, a boundary, pollution sources and roads.
+
+\scriptsize
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+spasthma <- readOGR(".", "spasthma")
+spbdry <- readOGR(".", "spbdry")
+spsrc <- readOGR(".", "spsrc")
+sproads <- readOGR(".", "sproads")
+```
+
+## Binary point data
+
+We now provide a plot of the case and non-case locations, along with a boundary, major roads, and pollution sources.
+
+
+\small
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.5,fig.width=3,  tidy.opts=list(width.cutoff=50),eval=T,fig.show="hide"}
+plot(spbdry, axes=TRUE, lwd=0.5)
+plot(sproads, add=TRUE, lwd=2, col="darkslategrey")
+c_c <- (spasthma$Asthma == "case") + 1
+plot(spasthma[c_c == 1,], add=TRUE, pch=4, cex=0.6, col="mediumaquamarine")
+plot(spasthma[c_c == 2,], add=TRUE, pch=17, cex=0.75, col="goldenrod2")
+plot(spsrc, pch=22, add=TRUE, cex=1.2, bg="brown4")
+legend("bottomright", legend=c("non-cases", "cases", "pollution sources"), pch=c(4, 17, 22), pt.cex=c(0.6, 0.75, 1.2), pt.bg=c(NA, NA, "brown4"), col=c("mediumaquamarine", "goldenrod2", "black"), bty="n",cex=0.6) 
+```
+
+## Binary point data
+
+
+\small
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.5,fig.width=5.0,  tidy.opts=list(width.cutoff=40),eval=T,echo=F}
+plot(spbdry, axes=TRUE, lwd=0.5)
+plot(sproads, add=TRUE, lwd=2, col="darkslategrey")
+c_c <- (spasthma$Asthma == "case") + 1
+plot(spasthma[c_c == 1,], add=TRUE, pch=4, cex=0.3, col="mediumaquamarine")
+plot(spasthma[c_c == 2,], add=TRUE, pch=17, cex=0.4, col="goldenrod2")
+plot(spsrc, pch=22, add=TRUE, cex=1.2, bg="brown4")
+legend("topleft", legend=c("non-cases", "cases", "pollution sources"), pch=c(4, 17, 22), pt.cex=c(0.6, 0.75, 1.2), pt.bg=c(NA, NA, "brown4"), 
+col=c("mediumaquamarine", "goldenrod2", "black"), bty="n",cex=0.6) 
+```
+
+## Binary point data: KDE
+
+We now form KDE estimates of the densities of cases $f_1(x)$ and non-cases $f_0(x)$: ``kcases`` for the cases and ``kcontrols`` for the non-cases. 
+
+These density estimates are evaluated on a grid.
+
+Trial and error leads to a bandwidth choice of 0.06.
+
+We create an object of class ``ppp`` representing a point pattern dataset in the 2D plane.
+
+Note: we don't have a case-control dataset here, but we use the language to form objects.
+
+## Binary point data: KDE
+
+First we set the bandwidth.
+
+\small
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+bwasthma <- .06
+pppasthma <- as(spasthma, "ppp")
+pppasthma$window <- as(spbdry, "owin")
+marks(pppasthma) <- relevel(as.factor(pppasthma$marks$Asthma), "control")
+cases <- unmark(subset(pppasthma, marks(pppasthma) =="case"))
+ncases <- npoints(cases)
+controls <- unmark(subset(pppasthma, marks(pppasthma) =="control"))
+ncontrols <- npoints(controls)
+```
+
+## Binary point data: KDE
+
+
+``spkratio`` object contains both the ratio of density estimates (the odds, ``kratio``) and the log ratio (the log odds, ``logratio``).
+
+\small
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+kcases <- density(cases, bwasthma)
+kcontrols <- density(controls, bwasthma)
+spkratio0 <- as(kcases, "SpatialGridDataFrame")
+names(spkratio0) <- "kcases"
+spkratio0$kcontrols <- as(kcontrols, "SpatialGridDataFrame")$v
+spkratio <- as(spkratio0, "SpatialPixelsDataFrame")
+spkratio$kratio <- spkratio$kcases/spkratio$kcontrols
+spkratio$krationorm <- spkratio$kratio/(ncases/ncontrols)
+spkratio$logratio <-log(spkratio$kratio)-log(ncases/ncontrols)
+```
+
+## Binary point data: KDEs of control  distribution
+
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.0,fig.width=5.0,  tidy.opts=list(width.cutoff=40),eval=T,echo=T}
+spplot(spkratio,"kcontrols")
+```
+
+## Binary point data: KDEs of case distribution
+
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.0,fig.width=5.0,  tidy.opts=list(width.cutoff=40),eval=T,echo=T}
+spplot(spkratio,"kcases")
+```
+
+## Binary point data
+
+We have
+$$\frac{\hat{f}_1(s)}{\hat{f}_0(s)} = \frac{p(s)}{1-p(s)} \times \frac{c_0}{c_1},
+$$
+where $c_j=\int_A \lambda_j(s) ds.$
+
+The plot below show the ratio of the densities of cases and controls. We have not included estimates of $c_0$, $c_1$.
+
+Grey crosses mark the pollution surfaces.
+
+## Binary point data: ratio of densities
+
+\small
+```{r, echo=TRUE,collapse=TRUE, fig.height=3.0,fig.width=5.0,  tidy.opts=list(width.cutoff=40),eval=T}
+spplot(spkratio, "kratio")
+```
+
+## Binary point data: odds surface (ie normalized by $n_0/n_1$)
+
+\small
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.0,fig.width=5.0,   tidy.opts=list(width.cutoff=40),eval=T}
+spplot(spkratio, "krationorm")
+```
+
+## Binary point data: log odds ratio surface
+
+\small
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.0,fig.width=5.0,  tidy.opts=list(width.cutoff=40),eval=T}
+spplot(spkratio, "logratio")
+```
+
+
+## Binary point data
+
+Let $$\rho(s) = \frac{n_0}{n_1}\times \frac{f_1(s)}{f_0(s)}$$ represent the odds surface.
+
+Let $H_0$ represent the null of a constant odds surface. Kelsall and Diggle (1995a,b) suggested the use of the statistic
+$$T= \int_A [ \widehat{\rho}(s)-\hat\rho_0]^2 ds,$$
+where $\hat\rho_0=n_1/n_0$.
+
+This null can be evaluated via a Monte Carlo test in which the points are randomly relabelled and the integral is evaluated on a grid.
+
+## Binary point data: $p$-value map
+
+\scriptsize
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+niter <- 99
+ratio <- rep(NA, niter)
+pvaluemap <- rep(0, nrow(spkratio))
+rlabelratio <- matrix(NA, nrow=niter, ncol=nrow(spkratio))
+set.seed(1)
+for(i in 1:niter){
+  pppasthma0<-rlabel(pppasthma)
+  casesrel <- unmark(subset(pppasthma0, marks(pppasthma0) =="case"))
+  controlsrel <- unmark(subset(pppasthma0, marks(pppasthma0) =="control"))
+  kcasesrel <- density(casesrel, bwasthma)
+  kcontrolsrel <- density(controlsrel, bwasthma)
+  kratiorel <- eval.im(kcasesrel/kcontrolsrel)
+  rlabelratio[i,] <- as(as(kratiorel, "SpatialGridDataFrame"), "SpatialPixelsDataFrame")$v
+  pvaluemap <- pvaluemap + (spkratio$kratio < rlabelratio[i,])
+}
+```
+
+## Binary point data
+
+We report the $p$-value that assesses whether the overall surface is flat. 
+
+\small
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+cellsize <- kcontrols$xstep*kcontrols$ystep
+ratiorho <- cellsize*sum((spkratio$kratio-ncases/ncontrols)^2)
+ratio <- cellsize*apply(rlabelratio, 1, 
+ function(X, rho0 ){sum((X-rho0)^2)}, rho0=ncases/ncontrols)
+pvaluerho <- (sum(ratio > ratiorho)+1)/(niter+1)
+pvaluerho
+```
+
+The overall $p$-value is 0.61 so no evidence of non-constant odds over the map as a whole.
+
+## Binary point data
+
+We now start to construct the pointwise $p$-value map.
+
+\small
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+spkratio$pvaluemap <- (pvaluemap+1)/(niter+1)
+imgpvalue <- as.image.SpatialGridDataFrame(spkratio["pvaluemap"])
+clpvalue <- contourLines(imgpvalue, levels=c(0,.05, .95, 1))
+cl <- ContourLines2SLDF(clpvalue)
+```
+
+
+## Binary point data: set up for contour lines on $p$-value plot
+
+\small
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+library(RColorBrewer)
+cl05 <- cl[cl$level == "0.05",]
+xzx <- slot(slot(cl05, "lines")[[1]], "Lines")
+cl05a <- SpatialLines(list(Lines(xzx, ID="0.05")))
+lyt05 <- list("sp.lines", cl05a, lwd=2, lty=2, col="grey95")
+lyt95 <- list("sp.lines", cl[cl$level == "0.95",], lwd=2, lty=1)
+lytb <- list("sp.polygons", spbdry)
+lytp <- list("sp.points", spsrc, cex=0.9, pch=4, col="grey95", lwd=3)
+brks <- quantile(spkratio$kratio[spkratio$kratio>0], seq(0,1,1/10), na.rm=TRUE)
+brks[1] <- 0
+lbrks <- formatC(brks, 3, 6, "g", " ")
+cols <- colorRampPalette(brewer.pal(7, "Reds"))(length(brks)-1)
+colorkey <- list(labels=lbrks,at=(0:10)/10, height=0.5)
+```
+
+## Binary point data
+
+The plot below shows the KDE estimate of the ratio of the intensity of cases and controls, i.e. $\rho(s)$.
+
+The continuous and dashed lines show the surfaces associated with 0.95 and 0.05 $p$-values, respectively. The estimate of the null value for a constant (flat) surface is $\hat \rho = 0.20$.
+
+Grey crosses mark the pollution surfaces.
+
+\small
+```{r, echo=TRUE,collapse=TRUE,  tidy.opts=list(width.cutoff=40),eval=T,fig.show="hide"}
+spplot(spkratio, "kratio",
+   col.regions=cols,
+   do.log=TRUE, 
+   colorkey=colorkey,
+   at=c(0, brks[-c(1,11)], max(spkratio$kratio, na.rm=TRUE)),
+   sp.layout=list(lyt05, lyt95, lytb, lytp) )
+```
+
+## Binary point data: ratio of densities, with $p$-values
+
+```{r, echo=TRUE,collapse=TRUE,fig.height=3.5,fig.width=4.0,  tidy.opts=list(width.cutoff=40),eval=T,echo=F}
+spplot(spkratio, "kratio",
+   col.regions=cols,
+   do.log=TRUE, 
+   colorkey=colorkey,
+   at=c(0, brks[-c(1,11)], max(spkratio$kratio, na.rm=TRUE)),
+   sp.layout=list(lyt05, lyt95, lytb, lytp) )
+```
+
+## Binary point data
+
+We now turn to a binary regression estimator, as suggested by Kelsall and Diggle (1998).
+
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+rrbw <- bw.relrisk(pppasthma,hmax=.5)
+bwasthmap <- 0.06 
+rr <- relrisk(pppasthma, bwasthmap)
+spkratio$prob <- as(as(rr, "SpatialGridDataFrame"), "SpatialPixelsDataFrame")$v
+ats <- seq(0,max(spkratio$prob),length.out=11)
+cols <- colorRampPalette(brewer.pal(8, "Reds"))(length(ats)-1)
+```
+
+## Binary point data: binary regression estimator
+
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T,fig.show="hide"}
+spplot(spkratio, "prob", col.regions=cols, at=ats, sp.layout=list(lytb, lytp))
+```
+
+## Binary point data
+
+```{r, message=FALSE, collapse=TRUE,echo=F,fig.height=3.5,fig.width=5.0, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+spplot(spkratio, "prob", col.regions=cols, at=ats, sp.layout=list(lytb, lytp))
+```
+
+## Binary point data
+
+We now turn to the use of a generalized additive model (GAM).
+
+We use the example of Bivand et al. (2013, Section 7.5.3) in which a penalized regression spline is used, and a variety of covariates are adjusted for.
+
+\small
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+spasthma$y <- as.integer(as.factor(spasthma$Asthma))-1#as.integer(!as.integer(spasthma$Asthma)-1)
+ccasthma <- coordinates(spasthma)
+spasthma$x1 <- ccasthma[,1]
+spasthma$x2 <- ccasthma[,2]
+spasthma$dist1 <- sqrt(spasthma$d2source1)
+spasthma$dist2 <- sqrt(spasthma$d2source2)
+spasthma$dist3 <- sqrt(spasthma$d2source3)
+spasthma$droads <- sqrt(spasthma$roaddist2)
+spasthma$smoking <- as.factor(as.numeric(spasthma$Nsmokers>0))
+spasthma$Genderf<- as.factor(spasthma$Gender)
+spasthma$HayFeverf<- as.factor(spasthma$HayFever)
+```
+## Binary point data
+
+The gam model has a smoother in space, and a paramtric (logistic regression) model for the covariates.
+
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+library(mgcv)
+gasthma <- gam(y~1+dist1+dist2+dist3+droads+Genderf+Age+HayFeverf+smoking+s(x1,x2), data=spasthma[spasthma$Gender==1 | spasthma$Gender==2, ], family=binomial)
+```
+
+
+## Binary point data
+
+\tiny
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+summary(gasthma)
+```
+
+## Binary point data: plot of the residual smoothed surface
+
+
+```{r, message=FALSE, collapse=TRUE,echo=F,fig.height=3.5,fig.width=5.0, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
+plot(gasthma)
+```
