@@ -230,7 +230,7 @@ wacounty$TotPop90[1:3]
 We look at some variables, and then set up the colors to map. We map 1990 Washington population counts by census tracts.
 
 ```{r}
-# function to make legend; copy from maptools package
+# function to make legend; copied from deprecated maptools package
 leglabs = function(vec, under = "under", over = "over", between = "-") {
     x <- vec
     lx <- length(x)
