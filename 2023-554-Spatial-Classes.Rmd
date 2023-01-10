@@ -27,7 +27,11 @@ opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center', tidy.opts=list(b
 ``R`` has extensive spatial capabilities, the 
 Spatial task view is [here](http://cran.r-project.org/web/views/Spatial.html) 
 
-Some of the notes that follow are build on Roger Bivand's notes taken from the latter site, and these are based on Bivand et al. (2013), which  is a good reference book of developments until that point.
+Some of the notes that follow are build on Roger Bivand's notes taken from the latter site, and these are based on Bivand et al. (2013), which  is a good reference book of the spatial capabilities of R at that point.
+
+See [Spatial Data Science: With Applications in R](https://r-spatial.org/book/) by Pebesma and Bivand, for a more up to date version.
+
+Another resource is the book [Geocomputation with R](https://geocompr.robinlovelace.net/index.html)
 
 To get R code alone then load the ``knitr`` library and then
 
@@ -47,9 +51,6 @@ Spatial classes were defined to represent and handle spatial data, so that data 
 
 These notes will focus on ``sf``.
 
-See [Spatial Data Science: With Applications in R](https://r-spatial.org/book/) by Pebesma and Bivand, for a more up to date version.
-
-Another resource is the book [Geocomputation with R](https://geocompr.robinlovelace.net/index.html)
 
 ### The ``sf`` Representation
 
