@@ -94,6 +94,37 @@ cc1 <-  st_coordinates(st_centroid(st_geometry(nc)))
 text(cc1, labels = 1:nrow(nc), col = "orange",cex=.5)
 ```
 
+A county map of North Carolina with text
+
+```{r,fig.height=5.5}
+library(maps)
+map("county", "North Carolina", fill = TRUE, plot = FALSE) |> 
+  st_as_sf() |> 
+  st_make_valid() -> nc
+centroids = st_centroid(st_geometry(nc)) |> st_coordinates()
+plot(st_geometry(nc))
+text(centroids[,1], centroids[,2], 1:100, offset=0, cex=0.4)
+```
+
+Another way of labeling, but in ggplot:
+
+```{r,fig.height=5.5}
+ggplot() +
+  geom_sf(data = nc, col = "black", fill = NA) +
+  geom_text(aes(x = centroids[ , 1], y = centroids[ , 2], 
+                label = 1:100), size = 2) +
+  theme_bw() +
+  coord_sf() +
+  xlab("") +
+  ylab("") +
+  theme(legend.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+```
+
+
 It is also possible to subset this data and plot it. You can run each line sequentially in R to see what each line of code adds to the plot. Note that this is written in base R, not with `ggplot()` where each line of code builds upon the plot.
 
 We plot 7 areas only, and then highlight the first 5.
@@ -262,7 +293,7 @@ tm_shape(st_set_crs(wacounty, 4326)[sel,]) +
 
 For illustration, we define our own cutpoints by hand.
 
-```{r,fig.height=5.5, eval=FALSE}
+```{r,fig.height=5.5}
 summary(wacounty$TotPop90)
 wacounty$cats <- cut(wacounty$TotPop90,breaks=c(0,17000,39000,100000,1520000),
                      labels=c("<17,000","17,000-39,000","39,000-100,000",">100,000"))
@@ -327,35 +358,7 @@ legend("bottomleft",legend=leglabs(round(brks,digits=1)),
          fill=plotclr,cex=0.4,bty="n")
 ```
 
-A county map of North Carolina with text
 
-```{r,fig.height=5.5}
-library(maps)
-map("county", "North Carolina", fill = TRUE, plot = FALSE) |> 
-  st_as_sf() |> 
-  st_make_valid() -> nc
-centroids = st_centroid(st_geometry(nc)) |> st_coordinates()
-plot(st_geometry(nc))
-text(centroids[,1], centroids[,2], 1:100, offset=0, cex=0.4)
-```
-
-In ggplot:
-
-```{r,fig.height=5.5}
-ggplot() +
-  geom_sf(data = nc, col = "black", fill = NA) +
-  geom_text(aes(x = centroids[ , 1], y = centroids[ , 2], 
-                label = 1:100), size = 2) +
-  theme_bw() +
-  coord_sf() +
-  xlab("") +
-  ylab("") +
-  theme(legend.title = element_blank(),
-        panel.grid = element_blank(),
-        panel.border = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank())
-```
 
 ### John Snow Example
 
