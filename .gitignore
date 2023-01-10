@@ -2,6 +2,8 @@
 *.graph
 *.shp
 *.shx
-*R_chache
-*R_files
+*chache*
+*files*
 .DS_Store
+.Rproj.user
+*.Rproj
