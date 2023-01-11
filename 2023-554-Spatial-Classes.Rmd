@@ -156,8 +156,7 @@ We can also look at the `meuse` dataset from the `sp` package and convert the da
 ```{r}
 library(sp)
 data(meuse, package = "sp")
-coordinates(meuse) = ~x+y
-m.sf = st_as_sf(meuse)
+m.sf <- st_as_sf(meuse, coords = c("x","y"))
 head(m.sf,n=3)
 opar = par(mar=rep(0,4))
 plot(m.sf)
@@ -349,7 +348,24 @@ legend(-119,46,legend=leglabs(round(brks,digits=1)),
          fill=plotclr,cex=0.4,bty="n")
 ```
 
-We zoom in on King County
+We can also do this using `ggplot()`, which is part of the `tidyverse` package, as shown below:
+
+```{r}
+ggplot(data = watract) +
+  geom_sf(aes(fill = colcode)) +
+  scale_fill_manual(values = rev(plotclr), labels = rev(leglabs(round(brks,digits=1)))) +
+  theme_bw() +
+  coord_sf() +
+  xlab("") +
+  ylab("") +
+  theme(legend.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+```
+
+We zoom in on King County (using the `plot()` function from base R):
 
 ```{r, fig.height=5.5}
 xx=which(watract$CNTY==33)
@@ -358,6 +374,22 @@ legend("bottomleft",legend=leglabs(round(brks,digits=1)),
          fill=plotclr,cex=0.4,bty="n")
 ```
 
+Again, we can do this using `ggplot()`, too:
+
+```{r}
+ggplot(data = watract[xx,]) +
+  geom_sf(aes(fill = colcode[xx])) +
+  scale_fill_manual(values = rev(plotclr), labels = rev(leglabs(round(brks,digits=1)))) +
+  theme_bw() +
+  coord_sf() +
+  xlab("") +
+  ylab("") +
+  theme(legend.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+```
 
 
 ### John Snow Example
