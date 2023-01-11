@@ -25,7 +25,7 @@ opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center', tidy.opts=list(b
 
 ## R for Spatial Analysis
 
-``R`` has extensive spatial capabilities, the 
+``R`` has extensive spatial  capabilities, the 
 Spatial task view is [here](http://cran.r-project.org/web/views/Spatial.html) 
 
 Some of the notes that follow are build on Roger Bivand's notes taken from the latter site, and these are based on Bivand et al. (2013), which  is a good reference book of the spatial capabilities of R at that point.
