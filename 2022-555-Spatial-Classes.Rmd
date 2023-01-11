@@ -436,7 +436,7 @@ Let's see what these variables look like: we see county names and FIPS codes.
 names(wacounty)
 wacounty$AreaName[1:3] 
 wacounty$AreaKey[1:3] 
-head(wacounty)
+# head(wacounty)
 ```
 
 ```{r }
