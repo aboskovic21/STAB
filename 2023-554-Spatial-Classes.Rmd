@@ -20,7 +20,7 @@ library(RColorBrewer)
 library(sf)
 library(classInt)
 library(tidyverse)
-opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center', tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE, tidy=TRUE, cache=TRUE)
+opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center', tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE, tidy=TRUE, cache=FALSE)
 ```
 
 ## R for Spatial Analysis

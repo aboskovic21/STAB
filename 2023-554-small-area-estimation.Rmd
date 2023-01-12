@@ -14,7 +14,7 @@ output:
 options(scipen=1, digits=2)
 # Uncomment to enter DEBUG mode. The package vignette will compile, but code will not be evaluated for speed purposes.
 knitr::opts_chunk$set(eval = TRUE)
-knitr::opts_chunk$set(fig.width=9, fig.height=5, out.width = '100%', message = FALSE, warning = FALSE, cache = TRUE) 
+knitr::opts_chunk$set(fig.width=9, fig.height=5, out.width = '100%', message = FALSE, warning = FALSE, cache = FALSE) 
 options(formatR.arrow=TRUE, width=70)
 knitr::opts_chunk$set(dev = 'png')
 ```
@@ -71,7 +71,7 @@ The ```sae::direct``` function computes the Horvitz-Thompson (direct) estimator 
 
 where $N_i$ is the population size of domain $i$, $S_i$ is the set of sampled observations in domain $i$, $w_{k}$ is the sampling weight for unit $k$, and $y_{k}$ is the observation for unit $k$, for all $k \in S_i$. The ```sae::direct``` function also estimates standard deviation and coefficient of variation for each domain.
 
-```{r sae.dir, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60), cache = T}
+```{r sae.dir, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60)}
 Popn <- sizeprov[, c("provlab", "Nd")]
 sae.DIR <- sae::direct(y = incomedata$poor, dom = incomedata$provlab,
                        sweight = incomedata$weight, domsize = Popn)
@@ -83,7 +83,7 @@ knitr::kable(head(sae.DIR), digits = 3)
 
 We can similarly use the ```survey::svyby``` function to compute the Horvitz-Thompson estimates:
 
-```{r svy.dir, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60), cache = T}
+```{r svy.dir, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60)}
 incomedata$pop <- sum(sizeprov$Nd[match(incomedata$provlab, sizeprov$provlab)])
 design <- survey::svydesign(ids = ~1, weights = ~weight, data = incomedata, fpc = ~pop)
 
@@ -128,7 +128,7 @@ abline(0,1,col="red")
 
 The ``sae::mseFH`` function calculates the empirical best linear unbiased predictors (EBLUP) for all domain means as well as their estimated MSEs.
 
-```{r sae.fh, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60), cache = T}
+```{r sae.fh, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60)}
 sae.FH <- sae::mseFH(sae.DIR$Direct~1, sae.DIR$SD^2)
 ```
 
@@ -152,7 +152,7 @@ Other optional arguments can be specified to change the priors and are described
 
 We obtain direct estimates and smoothed estimates below, fitting the Fay-Herriot model to the untransformed direct estimates.
 
-```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60), cache = T}
+```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=60)}
 # fit the model
 domain.size <- sizeprov[, c("provlab", "Nd")]
 colnames(domain.size)[2] <- "size"
@@ -169,7 +169,7 @@ In the absence of strong priors, fixed effects are usually in close agreement, w
 
 We first illustrate the shrinkage of the EBLUP estimates, and the reduced uncertainty:
 
-```{r, message=FALSE, collapse=TRUE, cache = T}
+```{r, message=FALSE, collapse=TRUE}
 par(mfrow = c(1, 2))
 plot(sae.DIR$Direct, sae.FH$est$eblup,
      xlab = "Direct estimates",ylab = "sae package",
@@ -187,7 +187,7 @@ abline(0,1,col="red")
 
 Now compare EBLUP and HB, using posterior variance from ```SUMMER``` and estimated MSE from ```sae``` to measure uncertainty:
 
-```{r, message=FALSE, collapse=TRUE, cache = T}
+```{r, message=FALSE, collapse=TRUE}
 par(mfrow = c(1, 2))
 plot(sae.FH$est$eblup, summer.FH$s.dir.iid.est$median,
      xlab = "SAE package",ylab = "SUMMER package",
@@ -206,7 +206,7 @@ abline(0,1,col="red")
 
 Molina and Marhuenda (2015) also use a real dataset on milk expenditures Arora et al. (1997) to illustrate the implementation of area level models in the ```sae``` package. The ```milk``` dataset contains information on direct estimators for area level expenditures on milk based on data from the dairy survey component of the Consumer Expenditure Survey conducted by the U.S. Census Bureau. Weights are based on inverse sampling probabilities and adjusted for non-response/post-stratification. 
 
-```{r load.milk, message=FALSE, collapse=TRUE, cache = T}
+```{r load.milk, message=FALSE, collapse=TRUE}
 data(milk)
 milk$Var <- milk$SD^2
 knitr::kable(head(milk))
@@ -233,7 +233,7 @@ Results are compared to `SUMMER` below:
 
 Since the `milk` dataset only provides area level direct estimates and not unit level data, we use the `direct.est` argument as input.
 
-```{r summer.fh.milk, message=FALSE, collapse=TRUE, cache = T}
+```{r summer.fh.milk, message=FALSE, collapse=TRUE}
 # Major Area fixed effects
 Xmat <- milk[, c("SmallArea", "MajorArea")]
 Xmat$MajorArea <- as.factor(Xmat$MajorArea)
@@ -249,7 +249,7 @@ summer.FH.milk<- smoothArea(formula = yi~MajorArea,
 
 Again note that the posterior median for $\sigma_u^2$ is larger than the REML estimate.
 
-```{r milk.par.comp, message=FALSE, collapse=TRUE, cache = T}
+```{r milk.par.comp, message=FALSE, collapse=TRUE}
 # random effects precision
 1 / sae.FH.milk$est$fit$refvar 
 summer.FH.milk$s.dir.iid.fit$summary.hyperpar[,c(4)]
@@ -296,7 +296,7 @@ data("grapesprox")
 
 #### Results using ```sae```
 
-```{r sae.sfh.grape, message=FALSE, collapse=TRUE, cache = T}
+```{r sae.sfh.grape, message=FALSE, collapse=TRUE}
 sae.FH.grapes <- sae::mseSFH(grapehect ~ area + workdays - 1, var, grapesprox, data = grapes)
 
 results <- data.frame(DIR = grapes$grapehect,
@@ -396,7 +396,7 @@ head(cornsoybean,n=10)
 
 Next, we load the population auxiliary information:
 
-```{r corn_aux, message=FALSE, cache = T}
+```{r corn_aux, message=FALSE}
 data("cornsoybeanmeans")
 Xmean <-
   data.frame(cornsoybeanmeans[, c("CountyIndex",
@@ -410,7 +410,7 @@ head(Xmean)
 
 The ```sae::pbmseBHF``` function obtains EBLUPs under the nested error model and then uses a parametric bootstrap approach to estimate MSEs.
 
-```{r, message=FALSE, collapse=TRUE, results='hide',  cache = T}
+```{r, message=FALSE, collapse=TRUE, results='hide'}
 cornsoybean <- cornsoybean[-33, ] # remove outlier
 sae.bhf <- 
   pbmseBHF(CornHec ~ CornPix + SoyBeansPix,
@@ -421,7 +421,7 @@ sae.bhf <-
 
 ```SUMMER::smoothSurvey``` provides the ability to fit unit level models with unit level covariates for Gaussian response variables. Below we use the ```is.unit``` argument to specify a unit level model and then provide the column names of the unit level covariates in ```X.unit```. Finally, the ```X``` argument provides the area level means of each covariate for use when generating predictions. Note that in order to align the ```SUMMER``` estimates with those from the ```sae``` package, we specify a relatively flat prior on the variance of the area-specific random effect (```pc.u = 100, pc.alpha = 0.01``` specifies a penalized complexity prior such that $P(\sigma_u > 100)=0.01$ where $\sigma_u$ is the standard deviation of the area-specific random effects).
 
-```{r, message=FALSE, collapse=TRUE, results='hide',  cache = T}
+```{r, message=FALSE, collapse=TRUE, results='hide'}
 cornsoybean$id <- 1:dim(cornsoybean)[1]
 Xsummer <- Xmean
 colnames(Xsummer) = c("County", "CornPix", "SoyBeansPix")
@@ -459,7 +459,7 @@ abline(0,1)
 
 Below, we provide an example comparing spatial models from ```sae``` and ```SUMMER``` using data from the Behavioral Risk Factor Surveillance System (BRFSS).
 
-```{r, message=FALSE, collapse=TRUE, cache = T}
+```{r, message=FALSE, collapse=TRUE}
 library(ggplot2)
 library(patchwork)
 data(BRFSS)
@@ -476,7 +476,7 @@ direct <- svyby(~diab2, ~hracode, design, svymean)
 
 Below, we use `sae` to smooth the logit-transformed direct estimates.
 
-```{r, message=FALSE, collapse=TRUE, cache = T}
+```{r, message=FALSE, collapse=TRUE}
 direct$var <- direct$se ^ 2
 direct$logit.diab2 <- SUMMER::logit(direct$diab2)
 direct$logit.var <- direct$var / (direct$diab2 ^ 2 * (1 - direct$diab2) ^ 2)
@@ -491,7 +491,7 @@ results <- data.frame(region = direct$hracode,
 
 Below, we fit two versions of the spatial area levelmodel in `SUMMER`. If we change ```pc.u``` and ```pc.alpha``` from the default value $u=1,\alpha=0.01$ to $u=0.1,\alpha=0.01$, we assign more prior mass on smaller variance of the random effects, inducing more smoothing.
 
-```{r, message=FALSE, collapse=TRUE, warning = F, cache = T}
+```{r, message=FALSE, collapse=TRUE, warning = F}
 summer.brfss <- smoothArea(diab2~1, domain= ~hracode,
                            design = design,
                            responseType = "binary",
@@ -505,7 +505,7 @@ summer.brfss.alt <- smoothArea(diab2~1, domain= ~hracode,
 
 Finally, we use `SUMMER::mapPlot` to compare median estimates and uncertainty estimates obtained via `sae` and `SUMMER`.
 
-```{r, message=FALSE, collapse=TRUE, cache = T}
+```{r, message=FALSE, collapse=TRUE}
 toplot <-  summer.brfss$s.dir.sp.est
 toplot$logit.var <- toplot$var / 
   (summer.brfss$s.dir.sp.est$median ^ 2 * 
@@ -530,7 +530,7 @@ g2 <- mapPlot(data = toplot, geo = KingCounty,
 g1 / g2
 ```
 
-```{r, message=FALSE, collapse=TRUE, cache = T}
+```{r, message=FALSE, collapse=TRUE}
 par(mfrow = c(1, 2))
 range1 <- range(c(direct$diab2,toplot$median.alt))
 plot(direct$diab2,toplot$median,  

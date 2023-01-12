@@ -15,7 +15,7 @@ editor_options:
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 library(knitr)
-opts_chunk$set(collapse=TRUE, fig.align='center', tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=80,strip.white=TRUE), warning=FALSE,message=FALSE,cache=TRUE)
+opts_chunk$set(collapse=TRUE, fig.align='center', tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=80,strip.white=TRUE), warning=FALSE,message=FALSE,cache=FALSE)
 ```
 ## Overview
 

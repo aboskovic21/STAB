@@ -12,7 +12,7 @@ output:
 
 ```{r setup, include=FALSE}
 library(knitr)
-opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center',tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE,cache=TRUE)
+opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center',tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE,cache=FALSE)
 ```
 
 ## Scottish lip cancer data
