@@ -100,8 +100,7 @@ Let's plot the county boundaries and add a county label.
 
 ```{r}
 plot(st_geometry(nc1))
-cc1 <-  st_coordinates(st_centroid(st_geometry(nc1)))
-text(cc1, labels = 1:nrow(nc1), col = "orange",cex=.5)
+text(centroids, labels = 1:nrow(nc1), col = "orange",cex=.5)
 ```
 
 Another way of labeling, but in ggplot:
@@ -129,8 +128,8 @@ We plot 7 areas only, and then highlight the first 5.
 
 ```{r}
 # Subset the data
-nc5 <- nc[1:5, ]
-nc7 <- nc[1:7, ]
+nc5 <- nc1[1:5, ]
+nc7 <- nc1[1:7, ]
 
 # Plot the data
 plot(st_geometry(nc7))
@@ -189,10 +188,8 @@ library(maps) # for background map outlines
 
 Note that there are problems with the files, which are sorted by using the ``repair=T`` argument.
 
-The data can be downloaded from here:
-[here]("http://faculty.washington.edu/jonno/SISMIDmaterial/wacounty.shp")
-
-But we read in directly:
+The data can be downloaded from
+[here]("http://faculty.washington.edu/jonno/SISMIDmaterial"), but we read in directly:
 
 
 ```{r}
@@ -226,10 +223,10 @@ wacounty$TotPop90[1:3]
 
 We look at some variables, and then set up the colors to map. We map 1990 Washington population counts by census tracts.
 
-### Method 1
+First, define a utility function `leglabs` which will help us create labels for our legends.
 
-```{r, echo = FALSE}
-# function to make legend; copied from maptools package
+```{r}
+# utility function to make legend; copied from maptools package
 leglabs <- function(vec, under = "under", over = "over", between = "-") {
     x <- vec
     lx <- length(x)
@@ -243,7 +240,13 @@ leglabs <- function(vec, under = "under", over = "over", between = "-") {
 }
 ```
 
+
+### Method 1
+
+The first option for drawing maps is to use base `R` as follows:
+
 ```{r}
+# setup
 plotvar <- wacounty$TotPop90 # variable we want to map
 summary(plotvar)
 nclr <- 8 # next few lines set up the color scheme for plotting
@@ -251,9 +254,12 @@ plotclr <- brewer.pal(nclr,"Oranges")
 brks <- round(quantile(plotvar,probs=seq(0,1,1/(nclr))),digits=1)
 colornum <- findInterval(plotvar,brks,all.inside=T)
 colcode <- plotclr[colornum]
-plot(st_geometry(wacounty), col=colcode)
-legend(-119,46,legend=leglabs(round(brks,digits=1)),fill=plotclr,cex=0.35,bty="n")
+
+# plot
+plot(wacounty["TotPop90"], col=colcode, main="")
+legend("bottomright",legend=leglabs(round(brks,digits=1)),fill=plotclr,cex=0.65,bty="n",inset = c(0, -0.4), xpd=T)
 ```
+
 
 ### Method 2
 
@@ -274,15 +280,8 @@ ggplot(data = wacounty) +
         axis.text = element_blank())
 ```
 
+
 ### Method 3
-
-As another alternative we can use the ``plot`` function, which uses base plot for spatial data with attributes. We map the 1990 Washington population counts by county.
-
-```{r, fig.height=5.5}
-plot(wacounty["TotPop90"], breaks = brks)
-```
-
-### Method 4
 
 We can also use `tmap`:
 
@@ -305,16 +304,12 @@ tm_shape(st_set_crs(wacounty, 4326)[sel,]) +
     tm_layout(legend.outside = TRUE)
 ```
 
-We now highlight a couple of counties.
+We now highlight a couple of counties: King County and Spokane County.
 
 ```{r, fig.height=5.5}
-# identify counties of interest
-xx=which(wacounty$CNTY==33)
-xx2=which(wacounty$CNTY==63)
-
-# print them out to see what they look like
-xx
-xx2
+# identify IDs for counties of interest
+xx <- which(wacounty$AreaName == "WA, King County")
+xx2 <- which(wacounty$AreaName == "WA, Spokane County")
 
 # plot the whole state
 plot(st_geometry(wacounty), border="#00000075")
