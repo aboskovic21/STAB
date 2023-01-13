@@ -134,7 +134,7 @@ dat <- direct_df %>%
 # get smoothed direct estimates from INLA
 smoothed <- smoothSurvey(data = NULL, direct.est = dat, 
                          X = dat %>% select(region, hoh), # include covariate
-                         Amat = oldmat, regionVar = "region",
+                         Amat = mat, regionVar = "region",
                          responseVar = "p", direct.est.var = "p_var",
                          responseType = "binary")
 ```
