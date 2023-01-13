@@ -15,7 +15,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 library(knitr)
-opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center', tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE, tidy=TRUE, cache=TRUE)
+opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center', tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE, tidy=TRUE, cache=FALSE)
 ```
 
 ## R for Spatial Analysis
@@ -25,7 +25,7 @@ Spatial task view is [here](http://cran.r-project.org/web/views/Spatial.html)
 
 Some of the notes that follow are build on Roger Bivand's notes taken from the latter site, and these are based on Bivand et al (2013), which  is a good reference book of developments until that point.
 
-To get R code alone then load the ``knitr`` library and then type
+To get R code alone then load the ``knitr`` library and then type this
 
 ``purl("555-2022-Spatial-Classes.Rmd")`` 
 
@@ -436,7 +436,7 @@ Let's see what these variables look like: we see county names and FIPS codes.
 names(wacounty)
 wacounty$AreaName[1:3] 
 wacounty$AreaKey[1:3] 
-head(wacounty)
+# head(wacounty)
 ```
 
 ```{r }

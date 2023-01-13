@@ -1,0 +1,10 @@
+*.dbf
+*.graph
+*.shp
+*.shx
+*chache*
+*files*
+.DS_Store
+.Rproj.user
+*.Rproj
+.Rhistory
