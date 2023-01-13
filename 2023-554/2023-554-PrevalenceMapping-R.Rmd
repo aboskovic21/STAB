@@ -1,0 +1,283 @@
+---
+title: "2023 554 R Notes on Prevalence Mapping"
+author: |
+  | Jon Wakefield
+  | Departments of Biostatistics and Statistics
+  | University of Washington
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+  
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+opts_chunk$set(collapse=TRUE, fig.align='center', tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE), warning=FALSE,message=FALSE,cache=F)
+```
+
+# Overview and Preliminaries
+
+## Overview
+
+In these notes we analyze Demographic Health Survey (DHS) data on HIV prevalence in women age 15-29 in Malawi.
+
+The raw data can be requested from the DHS. Here we use data summaries. 
+
+We will use the ``SUMMER`` package for the computation and plotting.
+
+We will obtain:
+  
+  * Direct estimates (area-level)
+
+* Smoothed direct estimates (area-level)
+
+* Betabinomial cluster-level estimates (unit-level)
+
+
+## Libraries 
+
+```{r,fig.width=4.5, fig.height=3.3}
+# Install necessary packages 
+library(tidyverse)
+# install.packages("INLA",repos=c(getOption("repos"),
+# INLA="https://inla.r-inla-download.org/R/testing"), dep=TRUE)
+library(INLA)
+# devtools::install_github("richardli/SUMMER", build_vignettes = F, force = T)
+library(SUMMER)
+library(spdep)
+library(mapproj)
+library(ggpubr)
+library(sf)
+```
+
+
+## Read in the data
+
+```{r}
+# read in direct estimates and shape files
+# must have a folder named R-examples in your current working directory
+if (!("R-examples" %in% list.files())) {
+  dir.create("R-examples")
+}
+
+download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/direct.csv",
+              destfile = "R-examples/direct.csv")
+direct_df <- read.csv("R-examples/direct.csv")
+download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/gadm36_MWI_1.shx",
+              destfile = "R-examples/gadm36_MWI_1.shx")
+download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/gadm36_MWI_1.shp",
+              destfile = "R-examples/gadm36_MWI_1.shp")
+download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/gadm36_MWI_1.dbf",
+              destfile = "R-examples/gadm36_MWI_1.dbf")
+geo <- st_read("R-examples", layer = "gadm36_MWI_1")
+```
+
+
+## Remove a small island
+
+```{r}
+# filter out Likoma 
+geo <- geo[geo$NAME_1 != "Likoma",] 
+
+# Make lowercase to match DHS data
+geo$NAME_1 <- geo$NAME_1 %>% str_to_lower() %>% factor()
+geo$id <- rownames(geo)
+rownames(geo) <- geo$NAME_1
+
+# create neighbor matrix
+nb.r <- spdep::poly2nb(geo, queen = F)
+mat <- spdep::nb2mat(nb.r, style = "B", zero.policy = TRUE)
+colnames(mat) <- rownames(mat)
+```
+
+
+# Direct Estimates
+
+## Map of direct estimates 
+
+
+```{r,fig.height=2.3,fig.width=2.3}
+mapPlot(direct_df, variables = "p", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", legend.label = "Prevalence",
+        removetab = TRUE)
+```
+
+## Map of uncertainty of direct estimates 
+
+```{r,fig.height=2.3,fig.width=2.3}
+mapPlot(direct_df, variables = "p_sd", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", direction = -1, legend.label = "SD",
+        removetab = TRUE)
+```
+
+
+## Map of covariate, which is percent of households in that region that have a female head of household
+
+
+```{r,fig.height=2.3,fig.width=2.3}
+mapPlot(direct_df, variables = "hoh", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", direction = -1, legend.label = "Female Head \n of Household",
+        removetab = TRUE)
+```
+
+
+# Smoothed Direct
+
+## Smoothed direct estimates using SUMMER
+
+Obtain smoothed direct estimates using SUMMER - BYM2 model for space.
+
+```{r}
+# add variance columns to dataframe
+dat <- direct_df %>% 
+  mutate(logit_p_var = logit_p_sd^2,
+         p_var = p_sd^2)
+
+# get smoothed direct estimates from INLA
+smoothed <- smoothSurvey(data = NULL, direct.est = dat, 
+                         X = dat %>% select(region, hoh), # include covariate
+                         Amat = oldmat, regionVar = "region",
+                         responseVar = "p", direct.est.var = "p_var",
+                         responseType = "binary")
+```
+
+
+## Summaries from the smoothed direct model
+
+```{r}
+head(smoothed$HT,3)
+smoothed$fit$summary.fixed[,1:5]
+smoothed$fit$summary.hyperpar[,1:5]
+```
+
+## Map of median of smoothed direct estimates 
+
+```{r, fig.height=2.3,fig.width=2.3}
+mapPlot(smoothed$smooth, variables = "median", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", direction = -1, legend.label = "Prevalence",
+        removetab = TRUE)
+```
+
+
+## Map of uncertainty of smoothed direct estimates 
+
+```{r, fig.height=2.3,fig.width=2.3}
+smoothed$smooth$sd <- smoothed$smooth$var %>% sqrt()
+mapPlot(smoothed$smooth, variables = "sd", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", direction = -1, legend.label = "SD",
+        removetab = TRUE)
+```
+
+
+# Betabinomial Model
+
+## Betabinomial model: load the data
+
+
+```{r}
+# read in cluster-level data and urban/rural proportions at area level
+download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/urban_prop_sample_df.csv",
+              destfile = "R-examples/urban_prop_sample_df.csv")
+download.file("http://faculty.washington.edu/jonno/SISMIDmaterial/binom.csv",
+              destfile = "R-examples/binom.csv")
+binom_df <- read.csv("R-examples/binom.csv")
+urb_prop_df <- read.csv("R-examples/urban_prop_sample_df.csv", stringsAsFactors = FALSE)
+binom_df$strata_within_region <- ifelse(binom_df$urban == 1, "urban", "rural")
+weights <- urb_prop_df %>% 
+  mutate(urban = prop,
+         rural = 1 - prop) %>% 
+  select(region, urban, rural)
+```
+
+
+## Sort out the covariate and fit the model
+
+
+```{r}
+# create covariate data frame for input to smoothSurvey()
+# covariate is at the area level
+X <- binom_df %>% distinct(region, .keep_all = TRUE) %>% dplyr::select(region, head_house)
+
+bb <- smoothSurvey(data = binom_df, Amat = mat, X = X,
+                   is.unit.level = TRUE, is.agg = TRUE,
+                   responseType = "binary", responseVar = "y", regionVar = "region", 
+                   weightVar = NULL, strataVar.within = "strata_within_region", 
+                   clusterVar = "clustid", totalVar = "n",
+                   weight.strata = weights, nsim = 1000)
+
+bb$smooth.overall$sd <- bb$smooth.overall$var %>% sqrt()
+```
+
+
+## Summaries from the betabinomial model
+
+```{r}
+bb$fit$summary.fixed[,1:5]
+bb$fit$summary.hyperpar[,1:5]
+
+```
+
+## Betabinomial estimates map
+
+```{r, fig.height=2.3,fig.width=2.3}
+mapPlot(bb$smooth.overall, variables = "median", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", direction = -1, legend.label = "Prevalence",
+        removetab = TRUE)
+
+```
+
+
+## Betabinomial uncertainty map
+
+```{r, fig.height=2.3,fig.width=2.3}
+mapPlot(bb$smooth.overall, variables = "sd", geo = geo, by.data = "region", 
+        by.geo = "NAME_1", direction = -1, legend.label = "SD",
+        removetab = TRUE)
+```
+
+
+## Combine point estimates
+
+```{r}
+# define prevalence plots
+direct_prev <- mapPlot(direct_df, variables = "p", geo = geo, by.data = "region", 
+                       by.geo = "NAME_1", direction = -1, legend.label = "Prevalence",
+                       removetab = TRUE)
+smooth_prev <- mapPlot(smoothed$smooth, variables = "median", geo = geo, by.data = "region", 
+                       by.geo = "NAME_1", direction = -1, legend.label = "Prevalence",
+                       removetab = TRUE)
+bb_prev <- mapPlot(bb$smooth.overall, variables = "median", geo = geo, by.data = "region", 
+                   by.geo = "NAME_1", direction = -1, legend.label = "Prevalence",
+                   removetab = TRUE)
+```
+
+
+## Combine uncertainty estimates
+
+```{r}
+# define sd plots
+direct_sd <- mapPlot(direct_df, variables = "p_sd", geo = geo, by.data = "region", 
+                     by.geo = "NAME_1", direction = -1, legend.label = "SD",
+                     removetab = TRUE)
+smooth_sd <- mapPlot(smoothed$smooth, variables = "sd", geo = geo, by.data = "region", 
+                     by.geo = "NAME_1", direction = -1, legend.label = "SD",
+                     removetab = TRUE)
+bb_sd <- mapPlot(bb$smooth.overall, variables = "sd", geo = geo, by.data = "region", 
+                 by.geo = "NAME_1", direction = -1, legend.label = "SD",
+                 removetab = TRUE)
+
+```
+
+
+## Comparison of point estimates across methods
+
+```{r, fig.height=2.6,fig.width=4.6}
+ggarrange(direct_prev, smooth_prev, bb_prev, nrow = 1, common.legend = TRUE, legend = "right")
+```
+
+
+## Comparison of uncertainty across methods
+
+
+```{r, fig.height=2.6,fig.width=4.6}
+ggarrange(direct_sd, smooth_sd, bb_sd, nrow = 1, common.legend = TRUE, legend = "right")
+```
+
