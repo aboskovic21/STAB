@@ -33,6 +33,7 @@ library(RColorBrewer)
 library(ggplot2)
 library(ggridges)
 library(INLA)
+library(sf)
 ```
 
 We will fit a number of models to the Scottish lip cancer data, but first access the data.
