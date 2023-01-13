@@ -351,6 +351,36 @@ legend(-119,46,legend=leglabs(round(brks,digits=1)),
          fill=plotclr,cex=0.4,bty="n")
 ```
 
+Notice that we can also choose to zoom in on King county. Here is the Base R version:
+
+```{r}
+xx <- which(watract$CNTY == 33)
+plot(st_geometry(watract[xx, ]), col = colcode[xx])
+legend("bottomleft",
+  legend = leglabs(round(brks, digits = 1)),
+  fill = plotclr, cex = 0.4, bty = "n"
+)
+```
+
+Here is the `ggplot()` version:
+
+```{r}
+ggplot(data = watract[xx, ]) +
+  geom_sf(aes(fill = colcode[xx])) +
+  scale_fill_manual(values = rev(plotclr), labels = rev(leglabs(round(brks, digits = 1)))) +
+  theme_bw() +
+  coord_sf() +
+  xlab("") +
+  ylab("") +
+  theme(
+    legend.title = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
 
 ### John Snow Example
 
