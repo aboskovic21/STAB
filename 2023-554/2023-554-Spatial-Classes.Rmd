@@ -81,18 +81,15 @@ Note that the `st_read()` function takes in two arguments, the `dsn`, or data so
 st_layers(file)
 ```
 
-Let's look at the first few lines
-```{r}
-head(nc,n=3)
-```
-
-Let's  next define the centroids and convert `nc` into an `sf` object. We need the centroids so that we can extract coordinates.
+Let's look at the first few lines, define the centroids, and convert `nc` into an `sf` object. We need the centroids so that we can extract coordinates.
 
 ```{r}
 library(maps)
 map("county", "North Carolina", fill = TRUE, plot = FALSE) |> 
   st_as_sf() |> 
   st_make_valid() -> nc1
+
+head(nc1,n=3)
 centroids = st_centroid(st_geometry(nc1)) |> st_coordinates()
 ```
 
