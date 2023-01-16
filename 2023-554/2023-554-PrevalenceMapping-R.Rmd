@@ -96,7 +96,7 @@ colnames(mat) <- rownames(mat)
 
 ```{r,fig.height=2.3,fig.width=2.3}
 mapPlot(direct_df, variables = "p", geo = geo, by.data = "region", 
-        by.geo = "NAME_1", legend.label = "Prevalence",
+        by.geo = "NAME_1", direction = -1, legend.label = "Prevalence",
         removetab = TRUE)
 ```
 
