@@ -93,7 +93,7 @@ head(nc1,n=3)
 centroids = st_centroid(st_geometry(nc1)) |> st_coordinates()
 ```
 
-Let's plot the county boundaries and add a county label.
+Let's plot the county boundaries and add a county label. Notice that the labeling here is according to alphabetical order, as seen in the `head(nc1)` call in the previous chunk. 
 
 ```{r}
 plot(st_geometry(nc1))
@@ -198,7 +198,7 @@ class(wacounty)
 head(wacounty,n=3)
 ```
 
-Let's see what these variables look like: we see county names and FIPS codes.
+Let's see what these variables look like: we see county names and FIPS codes. When linking datasets, note that it's a good idea to use one of these variables, as they are generally reliable.
 
 ```{r}
 names(wacounty)
