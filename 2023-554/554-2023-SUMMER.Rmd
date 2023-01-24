@@ -1,5 +1,5 @@
 ---
-title: "2022 555 SUMMER Package R Notes"
+title: "2023 554 SUMMER Package R Notes"
 author: |
   | Jon Wakefield
   | Departments of Biostatistics and Statistics
@@ -67,16 +67,17 @@ BRFSS <- subset(BRFSS, !is.na(BRFSS$hracode))
 ```
 
 
-``KingCounty`` contains the map of the King County HRAs. In order to fit spatial smoothing model, we first
-need to compute the adjacency matrix for the HRAs, ``mat``, and make sure both the column and row names
-correspond to the HRA names.
+``KingCounty`` contains the map of the King County HRAs. In order to fit spatial smoothing model, we first need to compute the adjacency matrix for the HRAs, ``mat``, and make sure both the column and row names correspond to the HRA names.
 
 ```{r}
+library(sf) # Load sf for spatial analysis
+library(prioritizr) # Allows us to create an adjacency matrix
+
 data(KingCounty)
-library(spdep)
-nb.r <- poly2nb(KingCounty, queen = F, row.names = KingCounty$HRA2010v2_)
-mat <- nb2mat(nb.r, style = "B", zero.policy = TRUE)
-colnames(mat) <- rownames(mat)
+KingCounty <- st_as_sf(KingCounty)
+nb.r <- st_centroid(st_geometry(KingCounty), of_largest_polygon=TRUE)
+mat <- adjacency_matrix(KingCounty)
+colnames(mat) <- rownames(mat) <- KingCounty$HRA2010v2_
 mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
 mat[1:2,1:2]
 ```
@@ -84,7 +85,7 @@ mat[1:2,1:2]
 ## Create ``survey`` object
 
 We load the survey package and then define the survey object for the BRFSS data.
-We have stratified, disproporionate sampling, so note the arguments:
+We have stratified, disproportionate sampling, so note the arguments:
 
 - ``weights``
 - ``strata``
@@ -223,7 +224,6 @@ weightedsmooth = svysmoothed$smooth$var)
 ```
 
 Setting Up
-
 
 ```{r}
 l1 <- range(est)
