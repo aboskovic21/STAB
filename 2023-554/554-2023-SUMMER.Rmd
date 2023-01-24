@@ -151,6 +151,7 @@ head(smoothed$HT,n=1)
 We map the posterior mean estimates.
 
 ```{r}
+data(KingCounty)
 toplot <- smoothed$smooth
 mapPlot(data=toplot,geo=KingCounty,
 variables=c("mean"),
