@@ -212,7 +212,6 @@ svysmoothed$fit$summary.hyper[1:2,1:5]
 sqrt(1/svysmoothed$fit$summary.hyper[1,3:5])
 ```
 
-
 ```{r}
 est <- data.frame(naive = smoothed$HT$HT.est,
 weighted = svysmoothed$HT$HT.est,
@@ -249,6 +248,52 @@ library(gridExtra)
 grid.arrange(grobs = list(g1, g2, g3, g4), ncol = 2)
 ```
 
+We can also compare posterior medians of the two Bayes Fay Harriot models (`FHmodel` and `svysmoothed`).
+
+```{r}
+p1 <- mapPlot(data=FHmodel$smooth, geo=KingCounty,
+        variables = "median",
+        labels = "Direct Posterior Median",
+        by.data="region",
+        by.geo="HRA2010v2_")
+p2 <- mapPlot(data=svysmoothed$smooth, geo=KingCounty,
+        variables = "median",
+        labels = "Smoothed Posterior Median",
+        by.data="region",
+        by.geo="HRA2010v2_")
+grid.arrange(grobs = list(p1, p2), ncol = 2)
+```
+
+It's also useful to plot the estimates against each other and the posterior standard errors against each other.
+
+```{r}
+# Posterior Estimates
+ggplot(
+  data.frame(
+    smoothed1 = FHmodel$smooth$median,
+    smoothed2 = svysmoothed$smooth$median
+  ),
+  aes(x = smoothed1, y = smoothed2)
+) +
+  geom_point() +
+  labs(y = "Spatial FH Estimate", x = "Non-Spatial FH Estimate") +
+  geom_abline(color = "red") +
+  coord_equal(xlim = c(0.03, 0.17), ylim = c(0.03, 0.17))
+
+# Posterior SDs
+ggplot(
+  data.frame(
+    smoothed1 = sqrt(FHmodel$HT$HT.var),
+    smoothed2 = sqrt(svysmoothed$HT$HT.var)
+  ),
+  aes(x = smoothed1, y = smoothed2)
+) +
+  geom_point() +
+  labs(y = "Spatial FH Estimate", x = "Non-Spatial FH Estimate") +
+  geom_abline(color = "red") +
+  coord_equal(xlim = c(0.005, 0.06), ylim = c(0.005, 0.06))
+```
+
 
 ## SAE in Space and Time
 
@@ -266,7 +311,6 @@ type.st = 1)
 ```
 
 Maps of Posterior Means over Time
-
 
 ```{r}
 mapPlot(data = svysmoothed.year$smooth, geo = KingCounty, values = "mean",
