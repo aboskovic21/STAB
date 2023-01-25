@@ -12,7 +12,10 @@ output:
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 library(knitr)
-opts_chunk$set(collapse=TRUE, fig.align='center', tidy=TRUE, tidy.opts=list(blank=TRUE, width.cutoff=60,strip.white=TRUE), warning=FALSE,message=FALSE,cache=FALSE)
+opts_chunk$set(collapse = TRUE, fig.align = "center", tidy = TRUE, 
+               tidy.opts = list(blank = TRUE, width.cutoff = 60, 
+                                strip.white = TRUE), warning = FALSE, 
+               message = FALSE, cache = FALSE)
 ```
 
 ## Small Area Estimation (SAE)
@@ -41,7 +44,9 @@ available and install it if it is not.
 ```{r}
 library(SUMMER)
 if (!isTRUE(requireNamespace("INLA", quietly = TRUE))) {
-install.packages("INLA", repos=c(getOption("repos"), INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+  install.packages("INLA", repos = c(getOption("repos"),
+                                   INLA="https://inla.r-inla-download.org/R/stable"),
+                   dep=TRUE)
 }
 ```
 
@@ -75,11 +80,11 @@ library(prioritizr) # Allows us to create an adjacency matrix
 
 data(KingCounty)
 KingCounty <- st_as_sf(KingCounty)
-nb.r <- st_centroid(st_geometry(KingCounty), of_largest_polygon=TRUE)
+nb.r <- st_centroid(st_geometry(KingCounty), of_largest_polygon = TRUE)
 mat <- adjacency_matrix(KingCounty)
 colnames(mat) <- rownames(mat) <- KingCounty$HRA2010v2_
 mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
-mat[1:2,1:2]
+mat[1:2, 1:2]
 ```
 
 ## Create ``survey`` object
@@ -90,15 +95,17 @@ We have stratified, disproportionate sampling, so note the arguments:
 - ``weights``
 - ``strata``
 
-We then calculate the direct (weighted) esimates.
+We then calculate the direct (weighted) estimates.
 
 
 ```{r,}
 library(survey)
-design <- svydesign(ids = ~1, weights = ~rwt_llcp, 
-                    strata = ~strata, data = BRFSS)
+design <- svydesign(
+  ids = ~1, weights = ~rwt_llcp,
+  strata = ~strata, data = BRFSS
+)
 direct <- svyby(~diab2, ~hracode, design, svymean)
-head(direct,n=7)
+head(direct, n = 7)
 ```
 
 ## Binomial spatial smoothing model
@@ -118,9 +125,12 @@ The binomial smoothing model is fitted by specifying NULL for the survey charact
 Note how the polygon information is input, and the neighbors in the ``Amat`` argument - this is required for the ICAR.
 
 ```{r}
-smoothed <- smoothSurvey(data = BRFSS, geo = KingCounty, Amat = mat, responseType = "binary",
-responseVar = "diab2", strataVar = NULL, weightVar = NULL, regionVar = "hracode",
-clusterVar = NULL, CI = 0.95)
+smoothed <- smoothSurvey(
+  data = BRFSS, geo = KingCounty, Amat = mat, responseType = "binary",
+  responseVar = "diab2", strataVar = NULL, weightVar = NULL, 
+  regionVar = "hracode",
+  clusterVar = NULL, CI = 0.95
+)
 ```
 
 The usual INLA summaries can be found in ``smoothed$fit``:
@@ -134,7 +144,7 @@ Now examine some of the other components:
 names(smoothed)
 names(smoothed$HT)
 names(smoothed$smooth)
-head(smoothed$HT,n=4)
+head(smoothed$HT, n = 4)
 ```
 
 The smoothed estimates of $p_i$ and $\theta_i$ can be found in the smooth object returned by the function, and the
@@ -143,19 +153,21 @@ probabilities).
 
 
 ```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=1.5, fig.width = 3, eval = TRUE}
-head(smoothed$smooth,n=1)
-head(smoothed$HT,n=1)
+head(smoothed$smooth, n = 1)
+head(smoothed$HT, n = 1)
 ```
 
 
 We map the posterior mean estimates.
 
-```{r}
+```{r, fig.height=2.2, fig.width = 4}
 data(KingCounty)
 toplot <- smoothed$smooth
-mapPlot(data=toplot,geo=KingCounty,
-variables=c("mean"),
-labels=c("Posterior Mean"),by.data="region",by.geo="HRA2010v2_")
+mapPlot(
+  data = toplot, geo = KingCounty,
+  variables = c("mean"),
+  labels = c("Posterior Mean"), by.data = "region", by.geo = "HRA2010v2_"
+)
 ```
 
 
@@ -164,22 +176,26 @@ We map the Direct Estimates, which are available in the ``smoothSurvey`` fit.
 
 ```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=2.2, fig.width = 4, eval = TRUE}
 toplot$HTest <- smoothed$HT$HT.est
-mapPlot(data=toplot,geo=KingCounty,
-variables=c("HTest"),
-labels=c("Direct Estimates"),by.data="region",by.geo="HRA2010v2_")
+mapPlot(
+  data = toplot, geo = KingCounty,
+  variables = c("HTest"),
+  labels = c("Direct Estimates"), by.data = "region", by.geo = "HRA2010v2_"
+)
 ```
 
 Now map the lower and upper endpoints of 95\% CI for direct estimates
 
 
 ```{r, fig.height=2,fig.width=6 }
-lo <- smoothed$HT$HT.est-1.96*sqrt(smoothed$HT$HT.var)
-hi <- smoothed$HT$HT.est+1.96*sqrt(smoothed$HT$HT.var)
+lo <- smoothed$HT$HT.est - 1.96 * sqrt(smoothed$HT$HT.var)
+hi <- smoothed$HT$HT.est + 1.96 * sqrt(smoothed$HT$HT.var)
 toplot$HTlower <- lo
 toplot$HTupper <- hi
-mapPlot(data=toplot,geo=KingCounty,
-variables=c("HTlower","HTupper"),
-labels=c("Direct Lower","Direct Upper"),by.data="region",by.geo="HRA2010v2_")
+mapPlot(
+  data = toplot, geo = KingCounty,
+  variables = c("HTlower", "HTupper"),
+  labels = c("Direct Lower", "Direct Upper"), by.data = "region", by.geo = "HRA2010v2_"
+)
 ```
 
 ## Fit Fay-Herriot smoothing model, which  acknowledges the design
@@ -187,6 +203,7 @@ labels=c("Direct Lower","Direct Upper"),by.data="region",by.geo="HRA2010v2_")
 We now acknowledge the design and fit the model
 $$\widehat \theta_i \sim \mbox{N}(\theta_i,\widehat{V}_i)$$
 with $\widehat \theta_i = \log[\widehat{p}_i/(1-\widehat{p}_i)]$ where $\widehat p_i$ being the direct estimate and $\widehat V_i$ the variance of this estimate (where the design is acknowledged in the variance calculation) and
+
 $$
 \theta_i = \log \left( \frac{p_i}{1-p_i}\right) = \mu + \epsilon_i + \epsilon_i 
 $$
@@ -195,32 +212,42 @@ with $\epsilon_i \sim_{iid} N(0,\sigma^2)$.
 We put ``Amat=NULL`` to obtain an iid model only (i.e., the standard Fay-Herriot model without covariates).
 
 ```{r}
-FHmodel <- smoothSurvey(data = BRFSS, geo = KingCounty, Amat = NULL, responseType =  "binary",responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
-regionVar = "hracode", clusterVar = "~1", CI = 0.95)
+FHmodel <- smoothSurvey(
+  data = BRFSS, geo = KingCounty, Amat = NULL, responseType = "binary", 
+  responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
+  regionVar = "hracode", clusterVar = "~1", CI = 0.95
+)
 FHmodel$fit$summary.fixed[1:5]
 FHmodel$fit$summary.hyper[1:5]
-sqrt(1/FHmodel$fit$summary.hyper[3:5])
+sqrt(1 / FHmodel$fit$summary.hyper[3:5])
 ```
 
 Now extend the random effects structure to allow for BYM2 random effects.
 
 ```{r}
-svysmoothed <- smoothSurvey(data = BRFSS, geo = KingCounty, Amat = mat, responseType =  "binary",responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
-regionVar = "hracode", clusterVar = "~1", CI = 0.95)
+svysmoothed <- smoothSurvey(
+  data = BRFSS, geo = KingCounty, Amat = mat, responseType = "binary", 
+  responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
+  regionVar = "hracode", clusterVar = "~1", CI = 0.95
+)
 svysmoothed$fit$summary.fixed[1:5]
-svysmoothed$fit$summary.hyper[1:2,1:5]
-sqrt(1/svysmoothed$fit$summary.hyper[1,3:5])
+svysmoothed$fit$summary.hyper[1:2, 1:5]
+sqrt(1 / svysmoothed$fit$summary.hyper[1, 3:5])
 ```
 
 ```{r}
-est <- data.frame(naive = smoothed$HT$HT.est,
-weighted = svysmoothed$HT$HT.est,
-smooth = smoothed$smooth$mean,
-weightedsmooth = svysmoothed$smooth$mean)
-var <- data.frame(naive = smoothed$HT$HT.var,
-weighted = svysmoothed$HT$HT.var,
-smooth = smoothed$smooth$var,
-weightedsmooth = svysmoothed$smooth$var)
+est <- data.frame(
+  naive = smoothed$HT$HT.est,
+  weighted = svysmoothed$HT$HT.est,
+  smooth = smoothed$smooth$mean,
+  weightedsmooth = svysmoothed$smooth$mean
+)
+var <- data.frame(
+  naive = smoothed$HT$HT.var,
+  weighted = svysmoothed$HT$HT.var,
+  smooth = smoothed$smooth$var,
+  weightedsmooth = svysmoothed$smooth$var
+)
 ```
 
 Setting Up
@@ -229,38 +256,62 @@ Setting Up
 l1 <- range(est)
 l2 <- range(var)
 library(ggplot2)
-g1 <- ggplot(est, aes(x = naive, y = smooth)) + geom_point() +
-geom_abline(slope = 1, intercept = 0, color = "red") +
-ggtitle("Naive Ests") + xlab("Direct") + ylab("Smoothed")+ xlim(l1) + ylim(l1) 
-g2 <- ggplot(var, aes(x = naive, y = smooth)) + geom_point() +
-geom_abline(slope = 1, intercept = 0, color = "red") +
-ggtitle("Naive Vars") + xlab("Direct") + ylab("Smoothed") + xlim(l2) + ylim(l2)
-g3 <- ggplot(est, aes(x = weighted, y = weightedsmooth)) + geom_point() +
-geom_abline(slope = 1, intercept = 0, color = "red") +
-ggtitle("Survey Wtd Ests") + xlab("Direct") + ylab("Smoothed") + xlim(l1) + ylim(l1)
-g4 <- ggplot(var, aes(x = weighted, y = weightedsmooth)) + geom_point() +
-geom_abline(slope = 1, intercept = 0, color = "red") +
-ggtitle("Survey Wtd Vars") + xlab("Direct") + ylab("Smoothed") + xlim(l2) + ylim(l2)
-library(gridExtra)
+g1 <- ggplot(est, aes(x = naive, y = smooth)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ggtitle("Naive Ests") +
+  xlab("Direct") +
+  ylab("Smoothed") +
+  xlim(l1) +
+  ylim(l1)
+g2 <- ggplot(var, aes(x = naive, y = smooth)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ggtitle("Naive Vars") +
+  xlab("Direct") +
+  ylab("Smoothed") +
+  xlim(l2) +
+  ylim(l2)
+g3 <- ggplot(est, aes(x = weighted, y = weightedsmooth)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ggtitle("Survey Wtd Ests") +
+  xlab("Direct") +
+  ylab("Smoothed") +
+  xlim(l1) +
+  ylim(l1)
+g4 <- ggplot(var, aes(x = weighted, y = weightedsmooth)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ggtitle("Survey Wtd Vars") +
+  xlab("Direct") +
+  ylab("Smoothed") +
+  xlim(l2) +
+  ylim(l2)
 ```
 
 ```{r}
+library(gridExtra)
 grid.arrange(grobs = list(g1, g2, g3, g4), ncol = 2)
 ```
 
 We can also compare posterior medians of the two Bayes Fay Harriot models (`FHmodel` and `svysmoothed`).
 
-```{r}
-p1 <- mapPlot(data=FHmodel$smooth, geo=KingCounty,
-        variables = "median",
-        labels = "Direct Posterior Median",
-        by.data="region",
-        by.geo="HRA2010v2_")
-p2 <- mapPlot(data=svysmoothed$smooth, geo=KingCounty,
-        variables = "median",
-        labels = "Smoothed Posterior Median",
-        by.data="region",
-        by.geo="HRA2010v2_")
+```{r, fig.height=2.2, fig.width = 6}
+p1 <- mapPlot(
+  data = FHmodel$smooth, geo = KingCounty,
+  variables = "median",
+  labels = "Direct Posterior Median",
+  by.data = "region",
+  by.geo = "HRA2010v2_"
+)
+p2 <- mapPlot(
+  data = svysmoothed$smooth, geo = KingCounty,
+  variables = "median",
+  labels = "Smoothed Posterior Median",
+  by.data = "region",
+  by.geo = "HRA2010v2_"
+)
 grid.arrange(grobs = list(p1, p2), ncol = 2)
 ```
 
@@ -301,20 +352,22 @@ When data consist of observations from different time periods, we can extend the
 estimates over both space and time. The space-time interaction terms are modeled by the type I-IV
 interactions -- see Held (2000, Statistics in Medicine).
 
-
-
 ```{r}
-svysmoothed.year <- fitGeneric(data = BRFSS, geo = KingCounty, Amat = mat,
-responseType = "binary", responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
-regionVar = "hracode", clusterVar = "~1", timeVar = "year", time.model = "rw1",
-type.st = 1)
+svysmoothed.year <- fitGeneric(
+  data = BRFSS, geo = KingCounty, Amat = mat,
+  responseType = "binary", responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
+  regionVar = "hracode", clusterVar = "~1", timeVar = "year", time.model = "rw1",
+  type.st = 1
+)
 ```
 
 Maps of Posterior Means over Time
 
 ```{r}
-mapPlot(data = svysmoothed.year$smooth, geo = KingCounty, values = "mean",
-variables = "time", by.data = "region", by.geo = "HRA2010v2_", is.long = TRUE)
+mapPlot(
+  data = svysmoothed.year$smooth, geo = KingCounty, values = "mean",
+  variables = "time", by.data = "region", by.geo = "HRA2010v2_", is.long = TRUE
+)
 ```
 
 ## Final Comments
