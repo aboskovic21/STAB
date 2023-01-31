@@ -22,8 +22,7 @@ opts_chunk$set(collapse = TRUE, fig.align = "center", tidy = TRUE,
 
 In these notes, SAE via the ``SUMMER`` package will be illustrated.
 
-Details on ``SUMMER``, including a vignette, can be found [here](https://cran.r-project.org/web/packages/SUMMER/index.html)
-
+Details on ``SUMMER``, including a vignette, can be found at  [https://cran.r-project.org/web/packages/SUMMER/index.html](https://cran.r-project.org/web/packages/SUMMER/index.html).
 
 We illustrate with the Washington State BRFSS diabetes example and will obtain:
 
@@ -37,15 +36,16 @@ We illustrate with the Washington State BRFSS diabetes example and will obtain:
 
 We first load the ``SUMMER`` package.
 
-``INLA`` is not in a standard repository, so we check if it is
+This package also depends on ``INLA``, so we need to make sure ``INLA`` is installed. Note that ``INLA`` is not on CRAN so it has a special installation process. Here, we check if ``INLA`` is
 available and install it if it is not.
 
 
-```{r}
+```{r, tidy=F}
 library(SUMMER)
 if (!isTRUE(requireNamespace("INLA", quietly = TRUE))) {
-  install.packages("INLA", repos = c(getOption("repos"),
-                                   INLA="https://inla.r-inla-download.org/R/stable"),
+  install.packages("INLA",
+                   repos = c(getOption("repos"),
+                            INLA="https://inla.r-inla-download.org/R/stable"),
                    dep=TRUE)
 }
 ```
@@ -80,7 +80,6 @@ library(prioritizr) # Allows us to create an adjacency matrix
 
 data(KingCounty)
 KingCounty <- st_as_sf(KingCounty)
-nb.r <- st_centroid(st_geometry(KingCounty), of_largest_polygon = TRUE)
 mat <- adjacency_matrix(KingCounty)
 colnames(mat) <- rownames(mat) <- KingCounty$HRA2010v2_
 mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
@@ -160,7 +159,7 @@ head(smoothed$HT, n = 1)
 
 We map the posterior mean estimates.
 
-```{r, fig.height=2.2, fig.width = 4}
+```{r, fig.height=2.4, fig.width = 4}
 data(KingCounty)
 toplot <- smoothed$smooth
 mapPlot(
@@ -174,7 +173,7 @@ mapPlot(
 We map the Direct Estimates, which are available in the ``smoothSurvey`` fit.
 
 
-```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=2.2, fig.width = 4, eval = TRUE}
+```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=2.4, fig.width = 4, eval = TRUE}
 toplot$HTest <- smoothed$HT$HT.est
 mapPlot(
   data = toplot, geo = KingCounty,
@@ -186,7 +185,7 @@ mapPlot(
 Now map the lower and upper endpoints of 95\% CI for direct estimates
 
 
-```{r, fig.height=2,fig.width=6 }
+```{r, fig.height=2.4,fig.width=6 }
 lo <- smoothed$HT$HT.est - 1.96 * sqrt(smoothed$HT$HT.var)
 hi <- smoothed$HT$HT.est + 1.96 * sqrt(smoothed$HT$HT.var)
 toplot$HTlower <- lo
@@ -235,7 +234,9 @@ svysmoothed$fit$summary.hyper[1:2, 1:5]
 sqrt(1 / svysmoothed$fit$summary.hyper[1, 3:5])
 ```
 
-```{r}
+Now we can compile the four sets of estimates which either do or don't take into account the survey weights, and which either do or don't include smoothing over space. Then, create scatter plots to compare them.
+
+```{r, tidy=F}
 est <- data.frame(
   naive = smoothed$HT$HT.est,
   weighted = svysmoothed$HT$HT.est,
@@ -250,9 +251,7 @@ var <- data.frame(
 )
 ```
 
-Setting Up
-
-```{r}
+```{r, tidy=F}
 l1 <- range(est)
 l2 <- range(var)
 library(ggplot2)
@@ -297,7 +296,7 @@ grid.arrange(grobs = list(g1, g2, g3, g4), ncol = 2)
 
 We can also compare posterior medians of the two Bayes Fay Harriot models (`FHmodel` and `svysmoothed`).
 
-```{r, fig.height=2.2, fig.width = 6}
+```{r, fig.height=2.4, fig.width = 6}
 p1 <- mapPlot(
   data = FHmodel$smooth, geo = KingCounty,
   variables = "median",
@@ -317,7 +316,7 @@ grid.arrange(grobs = list(p1, p2), ncol = 2)
 
 It's also useful to plot the estimates against each other and the posterior standard errors against each other.
 
-```{r}
+```{r, fig.height=3}
 # Posterior Estimates
 ggplot(
   data.frame(
@@ -330,7 +329,9 @@ ggplot(
   labs(y = "Spatial FH Estimate", x = "Non-Spatial FH Estimate") +
   geom_abline(color = "red") +
   coord_equal(xlim = c(0.03, 0.17), ylim = c(0.03, 0.17))
+```
 
+```{r fig.height=3}
 # Posterior SDs
 ggplot(
   data.frame(
@@ -340,7 +341,7 @@ ggplot(
   aes(x = smoothed1, y = smoothed2)
 ) +
   geom_point() +
-  labs(y = "Spatial FH Estimate", x = "Non-Spatial FH Estimate") +
+  labs(y = "Spatial FH Posterior SD", x = "Non-Spatial FH Posterior SD") +
   geom_abline(color = "red") +
   coord_equal(xlim = c(0.005, 0.06), ylim = c(0.005, 0.06))
 ```
@@ -372,10 +373,10 @@ mapPlot(
 
 ## Final Comments
 
-More materials can be found [here](http://faculty.washington.edu/jonno/index.html)
+More materials can be found here: [http://faculty.washington.edu/jonno/index.html](http://faculty.washington.edu/jonno/index.html).
 
-```SUMMER``` has a Github page with the latest changes, see also:
+```SUMMER``` has a Github page with the latest changes, see also this [paper](https://arxiv.org/pdf/2007.05117.pdf):
 
-[paper](https://arxiv.org/pdf/2007.05117.pdf)
+Li ZR, Martin BD, Dong TQ, Fuglstad GA, Paige J, Riebler A, Clark S, Wakefield J. Space-time smoothing of demographic and health indicators using the R package SUMMER. arXiv preprint arXiv:2007.05117. 2020 Jul 10.
 
 
