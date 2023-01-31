@@ -68,7 +68,7 @@ We can use ``sapply()`` to see that the polygone ``ID`` slot corresponds to the 
 ```{r}
 all.equal(
   sapply(slot(smap, "polygons"), function(x){slot(x, "ID")}),
-  row.names(scotdata)
+  as.character(scotdata$county.names)
 )
 ```
 
