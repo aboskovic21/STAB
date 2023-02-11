@@ -86,7 +86,7 @@ mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
 mat[1:2, 1:2]
 ```
 
-## Create ``survey`` object
+## Direct weighted estimates using the ``survey`` package
 
 We load the survey package and then define the survey object for the BRFSS data.
 We have stratified, disproportionate sampling, so note the arguments:
@@ -94,7 +94,7 @@ We have stratified, disproportionate sampling, so note the arguments:
 - ``weights``
 - ``strata``
 
-We then calculate the direct (weighted) estimates.
+We then calculate the direct (weighted) estimates. These are also known as the Horvitz-Thompson estimates.
 
 
 ```{r,}
@@ -107,6 +107,7 @@ direct <- svyby(~diab2, ~hracode, design, svymean)
 head(direct, n = 7)
 ```
 
+
 ## Binomial spatial smoothing model
 
 We ignore the design and fit the model:
@@ -116,11 +117,9 @@ y_i | p_i &\sim& \mbox{Binomial}(n_i,p_i)\\
 \end{eqnarray*}
 with $b_i$ following a BYM2 model, i.e., an iid normal random effect and an intrinsic CAR (ICAR) random effect.
 
-The binomial smoothing model is fitted by specifying NULL for the survey characteristics.
+### The ``smoothSurvey`` function in the ``SUMMER`` package
 
-## The ``smoothSurvey`` function
-
-Note how the polygon information is input, and the neighbors in the ``Amat`` argument - this is required for the ICAR.
+The binomial smoothing model is fit with the ``smoothSurvey`` function in the ``SUMMER`` package by specifying ``NULL`` for the survey characteristics, i.e. strata, weights, and cluster variables. For this example we are using a BYM2 spatial effect, so we include the polygon information and the adjacency matrix in the ``geo`` and ``Amat`` arguments - this is required for the ICAR component.
 
 ```{r}
 smoothed <- smoothSurvey(
@@ -145,8 +144,7 @@ names(smoothed$smooth)
 head(smoothed$HT, n = 4)
 ```
 
-The smoothed estimates of $p_i$ and $\theta_i$ can be found in the smooth object returned by the function, and the direct estimates are stored in the HT object (without specifying survey weights, these are the simple binomial probabilities).
-
+The smoothed estimates of $p_i$ and $\theta_i$ can be found in the smooth object returned by the function, and the direct estimates are stored in the HT object (without specifying survey weights, these are the simple binomial probabilities, i.e. naive direct estimates).
 
 ```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=1.5, fig.width = 3, eval = TRUE}
 head(smoothed$smooth, n = 1)
@@ -154,7 +152,7 @@ head(smoothed$HT, n = 1)
 ```
 
 
-We map the posterior mean estimates.
+We map the posterior mean estimates for the binomial smoothing model.
 
 ```{r, fig.height=2.4, fig.width = 4}
 data(KingCounty)
@@ -167,7 +165,7 @@ mapPlot(
 ```
 
 
-We map the Direct Estimates, which are available in the ``smoothSurvey`` fit.
+We map the naive direct estimates, which are available in the ``smoothSurvey`` fit.
 
 
 ```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=2.4, fig.width = 4, eval = TRUE}
@@ -175,11 +173,11 @@ toplot$HTest <- smoothed$HT$HT.est
 mapPlot(
   data = toplot, geo = KingCounty,
   variables = c("HTest"),
-  labels = c("Direct Estimates"), by.data = "region", by.geo = "HRA2010v2_"
+  labels = c("Naive Direct Estimates"), by.data = "region", by.geo = "HRA2010v2_"
 )
 ```
 
-Now map the lower and upper endpoints of 95\% CI for direct estimates
+Now map the lower and upper endpoints of 95\% CI for direct estimates.
 
 
 ```{r, fig.height=2.4,fig.width=6 }
@@ -190,7 +188,18 @@ toplot$HTupper <- hi
 mapPlot(
   data = toplot, geo = KingCounty,
   variables = c("HTlower", "HTupper"),
-  labels = c("Direct Lower", "Direct Upper"), by.data = "region", by.geo = "HRA2010v2_"
+  labels = c("Naive Direct Lower", "Naive Direct Upper"), by.data = "region", by.geo = "HRA2010v2_"
+)
+```
+
+And also map the posterior coefficient of variation (CV) for the smoothed estimates, which we compute as $100 \times \text{sd}(p_i | y)/\mathbb{E}[ p_i | y ]$, i.e. the posterior standard deviation relative to the posterior mean. The CV is often a more easily interpretable uncertainty measure than the posterior standard deviation.
+
+```{r, fig.height=2.4,fig.width=4 }
+toplot$cv <- sqrt(smoothed$smooth$var)/smoothed$smooth$mean
+mapPlot(
+  data = toplot, geo = KingCounty,
+  variables = c("cv"),
+  labels = c("Posterior CV, Smoothed Estimates"), by.data = "region", by.geo = "HRA2010v2_"
 )
 ```
 
@@ -198,7 +207,7 @@ mapPlot(
 
 We now acknowledge the design and fit the model
 $$\widehat \theta_i \sim \mbox{N}(\theta_i,\widehat{V}_i)$$
-with $\widehat \theta_i = \log[\widehat{p}_i/(1-\widehat{p}_i)]$ where $\widehat p_i$ being the direct estimate and $\widehat V_i$ the variance of this estimate (where the design is acknowledged in the variance calculation) and
+with $\widehat \theta_i = \log[\widehat{p}_i/(1-\widehat{p}_i)]$ where $\widehat p_i$ being the direct weighted estimate and $\widehat V_i$ the variance of this estimate (where the design is acknowledged in the variance calculation) and
 
 $$
 \theta_i = \log \left( \frac{p_i}{1-p_i}\right) = \mu + \epsilon_i
@@ -218,7 +227,7 @@ FHmodel$fit$summary.hyper[1:5]
 sqrt(1 / FHmodel$fit$summary.hyper[3:5])
 ```
 
-Now extend the random effects structure to allow for BYM2 random effects.
+Now extend the random effects structure to allow for BYM2 random effects by supplying the adjacency matrix to ``smoothSurvey`` in the ``Amat`` argument. When we compare this to the previous version with iid random effects we will describe it as "spatial" (vs "nonspatial" for iid) in the sense that the BYM2 takes into account the spatial structure encoded in the adjacency matrix.
 
 ```{r}
 svysmoothed <- smoothSurvey(
@@ -231,7 +240,9 @@ svysmoothed$fit$summary.hyper[1:2, 1:5]
 sqrt(1 / svysmoothed$fit$summary.hyper[1, 3:5])
 ```
 
-Now we can compile the four sets of estimates which either do or don't take into account the survey weights, and which either do or don't include smoothing over space. Then, create scatter plots to compare them.
+## Comparing the results across models
+
+Now we can compile the four sets of estimates which either do or don't take into account the survey weights (weighted/Fay-Herriot versus naive), and which either do or don't include smoothing over space (indirect versus direct). Then, create scatter plots to compare them.
 
 ```{r, tidy=F}
 est <- data.frame(
@@ -291,27 +302,25 @@ library(gridExtra)
 grid.arrange(grobs = list(g1, g2, g3, g4), ncol = 2)
 ```
 
-We can also compare posterior medians of the two Bayes Fay Harriot models (`FHmodel` and `svysmoothed`).
+We can also compare the spatial (BYM2; `svysmoothed`) and non-spatial (IID; `FHmodel`) Bayes Fay Harriot models by map and by scatter plots.
 
 ```{r, fig.height=2.4, fig.width = 6}
 p1 <- mapPlot(
   data = FHmodel$smooth, geo = KingCounty,
   variables = "median",
-  labels = "Direct Posterior Median",
+  labels = "Non-spatial FH Posterior Median",
   by.data = "region",
   by.geo = "HRA2010v2_"
 )
 p2 <- mapPlot(
   data = svysmoothed$smooth, geo = KingCounty,
   variables = "median",
-  labels = "Smoothed Posterior Median",
+  labels = "Spatial FH Posterior Median",
   by.data = "region",
   by.geo = "HRA2010v2_"
 )
 grid.arrange(grobs = list(p1, p2), ncol = 2)
 ```
-
-It's also useful to plot the estimates against each other and the posterior standard errors against each other.
 
 ```{r, fig.height=3}
 # Posterior Estimates
@@ -341,6 +350,31 @@ ggplot(smoothed_sd_df, aes(x = nonspatial, y = spatial)) +
   labs(y = "Spatial FH Posterior SD", x = "Non-Spatial FH Posterior SD") +
   geom_abline(color = "red") +
   coord_equal(xlim = c(0.005, 0.06), ylim = c(0.005, 0.06))
+```
+
+And again map the coefficient of variation for these two Fay-Herriot models:
+
+```{r, fig.height=2.4, fig.width = 6}
+# compute cv
+FHmodel$smooth$cv <- sqrt(FHmodel$smooth$var) / FHmodel$smooth$mean
+svysmoothed$smooth$cv <- sqrt(svysmoothed$smooth$var) / svysmoothed$smooth$mean
+
+# map cv
+p1 <- mapPlot(
+  data = FHmodel$smooth, geo = KingCounty,
+  variables = "cv",
+  labels = "Non-spatial FH CV",
+  by.data = "region",
+  by.geo = "HRA2010v2_"
+)
+p2 <- mapPlot(
+  data = svysmoothed$smooth, geo = KingCounty,
+  variables = "cv",
+  labels = "Spatial FH CV",
+  by.data = "region",
+  by.geo = "HRA2010v2_"
+)
+grid.arrange(grobs = list(p1, p2), ncol = 2)
 ```
 
 
