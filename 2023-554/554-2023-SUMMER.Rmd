@@ -114,8 +114,7 @@ We ignore the design and fit the model:
 y_i | p_i &\sim& \mbox{Binomial}(n_i,p_i)\\
 \theta_i &=& \log \left( \frac{p_i}{1-p_i}\right) = \alpha + b_i 
 \end{eqnarray*}
-with $b_i$ following a BYM2 model, i.e., an iid normal random effect and an 
-intrinsic CAR (ICAR) random effect.
+with $b_i$ following a BYM2 model, i.e., an iid normal random effect and an intrinsic CAR (ICAR) random effect.
 
 The binomial smoothing model is fitted by specifying NULL for the survey characteristics.
 
@@ -146,9 +145,7 @@ names(smoothed$smooth)
 head(smoothed$HT, n = 4)
 ```
 
-The smoothed estimates of $p_i$ and $\theta_i$ can be found in the smooth object returned by the function, and the
-direct estimates are stored in the HT object (without specifying survey weights, these are the simple binomial
-probabilities).
+The smoothed estimates of $p_i$ and $\theta_i$ can be found in the smooth object returned by the function, and the direct estimates are stored in the HT object (without specifying survey weights, these are the simple binomial probabilities).
 
 
 ```{r, echo = TRUE, message = FALSE, collapse = TRUE, warning = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=50), fig.height=1.5, fig.width = 3, eval = TRUE}
@@ -204,7 +201,7 @@ $$\widehat \theta_i \sim \mbox{N}(\theta_i,\widehat{V}_i)$$
 with $\widehat \theta_i = \log[\widehat{p}_i/(1-\widehat{p}_i)]$ where $\widehat p_i$ being the direct estimate and $\widehat V_i$ the variance of this estimate (where the design is acknowledged in the variance calculation) and
 
 $$
-\theta_i = \log \left( \frac{p_i}{1-p_i}\right) = \mu + \epsilon_i + \epsilon_i 
+\theta_i = \log \left( \frac{p_i}{1-p_i}\right) = \mu + \epsilon_i
 $$
 with $\epsilon_i \sim_{iid} N(0,\sigma^2)$.
 
@@ -318,13 +315,12 @@ It's also useful to plot the estimates against each other and the posterior stan
 
 ```{r, fig.height=3}
 # Posterior Estimates
-ggplot(
-  data.frame(
-    smoothed1 = FHmodel$smooth$median,
-    smoothed2 = svysmoothed$smooth$median
-  ),
-  aes(x = smoothed1, y = smoothed2)
-) +
+smoothed_nonspatial <- FHmodel$smooth[, c("region", "median")]
+smoothed_spatial <- svysmoothed$smooth[, c("region", "median")]
+smoothed_df <- merge(smoothed_nonspatial, smoothed_spatial, by = "region")
+names(smoothed_df) <- c("region", "nonspatial", "spatial")
+
+ggplot(smoothed_df, aes(x = nonspatial, y = spatial)) +
   geom_point() +
   labs(y = "Spatial FH Estimate", x = "Non-Spatial FH Estimate") +
   geom_abline(color = "red") +
@@ -333,13 +329,14 @@ ggplot(
 
 ```{r fig.height=3}
 # Posterior SDs
-ggplot(
-  data.frame(
-    smoothed1 = sqrt(FHmodel$HT$HT.var),
-    smoothed2 = sqrt(svysmoothed$HT$HT.var)
-  ),
-  aes(x = smoothed1, y = smoothed2)
-) +
+smoothed_nonspatial_sd <- FHmodel$smooth[, c("region", "var")]
+smoothed_spatial_sd <- svysmoothed$smooth[, c("region", "var")]
+smoothed_sd_df <- merge(smoothed_nonspatial_sd, smoothed_spatial_sd, by = "region")
+names(smoothed_sd_df) <- c("region", "nonspatial", "spatial")
+smoothed_sd_df$spatial <- sqrt(smoothed_sd_df$spatial) # convert variance to sd
+smoothed_sd_df$nonspatial <- sqrt(smoothed_sd_df$nonspatial)
+
+ggplot(smoothed_sd_df, aes(x = nonspatial, y = spatial)) +
   geom_point() +
   labs(y = "Spatial FH Posterior SD", x = "Non-Spatial FH Posterior SD") +
   geom_abline(color = "red") +
