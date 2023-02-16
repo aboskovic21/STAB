@@ -385,7 +385,7 @@ estimates over both space and time. The space-time interaction terms are modeled
 interactions -- see Held (2000, Statistics in Medicine).
 
 ```{r}
-svysmoothed.year <- fitGeneric(
+svysmoothed.year <- smoothSurvey(
   data = BRFSS, geo = KingCounty, Amat = mat,
   responseType = "binary", responseVar = "diab2", strataVar = "strata", weightVar = "rwt_llcp",
   regionVar = "hracode", clusterVar = "~1", timeVar = "year", time.model = "rw1",
