@@ -15,10 +15,10 @@ editor_options:
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 library(knitr)
-opts_chunk$set(collapse=TRUE, fig.align='center', warning=FALSE,message=FALSE,cache=TRUE)
+opts_chunk$set(collapse=TRUE, fig.align='center', warning=FALSE,message=FALSE,cache=FALSE)
 ```
 
-## Overview
+# Overview
 
 In these notes we will consider mapping and modeling of point data in which the (nominal) exact locations are known.
 
@@ -30,7 +30,7 @@ We will look at modeling a spatially-indexed continuous response via:
 
 - A Bayesian approach using stochastic partial differential equations (SPDE)
 
-## Continuous Response: Motivating Example
+# Continuous Response: Motivating Example
 
 We illustrate methods for continuous data using on Zinc levels in the Netherlands.
 
@@ -49,6 +49,8 @@ The Meuse data are in a variety of packages. The version in the geoR library are
 library(geoR)
 library(sp)
 library(tidyverse)
+library(ggpubr)
+library(viridis)
 data("meuse")
 ```
 
@@ -61,45 +63,69 @@ zmat <- matrix(cbind(meuse$x,meuse$y,log(meuse$zinc)),
 geozinc <- as.geodata(zmat,coords.col=c(1,2),data.col=c(3))
 ```
 
-It's often a good idea to do some exploratory data analysis (EDA), so let's see what the relationship between distance to the Meuse river (`dist`) and flooding frequency (`ffreq`) are related.
-
-```{r}
-ggplot(meuse, aes(x = dist, y = ffreq)) +
-  geom_boxplot()
-```
-
+## Exploratory analysis
 
 We work with log(zinc) as the distribution is more symmetric than on the original scale, and the variance more constant across levels of covariates.
 
-As an illustration we include distance from river and elevation in the model.
+It's often a good idea to do some exploratory data analysis (EDA), so let's see how log(zinc) varies by three possible covariates:
 
-```{r}
-par(mfrow=c(1,2))
-plot(log(meuse$zinc)~meuse$dist,ylab="log(zinc)",xlab="Scaled distance",col="blue")
+- Flooding frequency (`ffreq`); 1 = once in two years; 2 = once in ten years; 3 = one in 50 years
+- Distance to the Meuse river (`dist`); normalized to $[0,1]$
+- Elevation (`elev`); relative to the local river bed, in meters.
+
+```{r, fig.height=3}
+par(mfrow=c(1,3))
+plot(log(meuse$zinc)~meuse$ffreq,ylab="log(zinc)",xlab="Flooding Frequency",col="blue")
+plot(log(meuse$zinc)~meuse$dist,ylab="log(zinc)",xlab="Scaled distance to river",col="blue")
 plot(log(meuse$zinc)~meuse$elev,ylab="log(zinc)",xlab="Elevation",col="blue")
 ```
 
-
-We will be assuming a spatial model on the residuals with elevation and distance in the model. 
+Also map these covariates.
 
 ```{r}
+m.sf <- sf::st_as_sf(meuse, coords = c("x","y"))
+m.sf$logzinc <- log(m.sf$zinc)
+
+a <- ggplot() + geom_sf(data = m.sf[,"logzinc"], aes(color = logzinc)) +
+  theme_void() + scale_color_viridis_c() + labs(title = "log(Zinc)", color=NULL)
+b <- ggplot() + geom_sf(data = m.sf[,"ffreq"], aes(color = ffreq)) +
+  theme_void() + scale_color_viridis(discrete=T) + labs(title = "Flooding Frequency", color=NULL)
+c <- ggplot() + geom_sf(data = m.sf[,"dist"], aes(color = dist)) +
+  theme_void() + scale_color_viridis_c() + labs(title = "Distance to Meuse", color=NULL)
+d <- ggplot() + geom_sf(data = m.sf[,"elev"], aes(color = elev)) +
+  theme_void() + scale_color_viridis_c() + labs(title = "Elevation", color=NULL)
+ggpubr::ggarrange(a,b,c,d, nrow=2, ncol=2)
+```
+
+# log(zinc) Variogram
+
+First we will be assuming a spatial model on the residuals with elevation and distance in the model. Fit this initial linear model, and view the residuals by histogram and map.
+
+```{r, fig.height=3.5, fig.width=5}
 LSmod <- lm(log(meuse$zinc)~meuse$dist+meuse$elev)
 LSresid <- residuals(LSmod)
 hist(LSresid)
-# hist(log(meuse$zinc),main="",xlab ="log(zinc)")
 ```
+
+```{r, fig.height=3.5}
+m.sf$resid <- LSresid
+ggplot() + geom_sf(data = m.sf[,"resid"], aes(color = resid)) +
+  theme_void() + scale_color_viridis_c() + labs(title = "Residual", color=NULL)
+```
+
+## Cloud
 
 Variogram cloud for log zinc, 
 
-```{r}
+```{r, fig.height=3.5, fig.width=5}
 cloudzinc <- variog(geozinc,option="cloud", trend=~meuse$dist+meuse$elev)
 plot(cloudzinc,ylab="Semi-variance",xlab="Distance (m)",col="grey",cex=.4)
 ```
 
-## log(zinc): Binned variogram with linear trend in distance and elevation
+## Binned variogram
 
-\small
-```{r}
+
+```{r, fig.height=3.5, fig.width=5}
 binzinc <- variog(geozinc,uvec=seq(0,5000,250),
            trend=~meuse$dist+meuse$elev)
 plot(binzinc,ylab="Semi-variance",xlab="Distance (m)",cex=.5,col="blue")
@@ -107,7 +133,7 @@ plot(binzinc,ylab="Semi-variance",xlab="Distance (m)",cex=.5,col="blue")
 
 Monte Carlo envelopes under no spatial dependence - it is clear there is dependence here.
 
-```{r}
+```{r, fig.height=3.5, fig.width=5}
 geozinc.env <- variog.mc.env(geozinc,obj=binzinc)
 plot(binzinc,env=geozinc.env,xlab="Distance (m)",ylab="Semi-variance")
 ```
@@ -120,18 +146,17 @@ where $d$ is the distance between the points, $\sigma^2$ is the partial sill and
 
 The effective range is the distance at which the correlation is 0.05, and if we have a rough estimate of this $\tilde{d}$ (from the binned variogram, for example) then we can solve for an initial estimate $\tilde{\phi} = -\tilde{d}/log(0.05)$.
 
-Maximum likelihood for log(zinc)
+## Maximum likelihood for log(zinc)
 
 We suppress the output from the call.
-\small
-```{r,results="hide"}
+
+```{r, results="hide"}
 mlfit <- likfit(geozinc,ini=c(.2,224),trend=~meuse$dist+meuse$elev)
 ```
 
 We examine the results, specifically point estimates and standard errors.
 
 ```{r}
-
 mlfit$parameters.summary
 for (i in 1:3){
 cat(cbind(mlfit$beta[i],sqrt(mlfit$beta.var[i,i])),"\n")
@@ -143,7 +168,6 @@ Note that the standard errors change from the least squares fit.
 
 ## Restricted maximum likelihood for log(zinc)
 
-\small
 ```{r,results="hide"}
 remlfit <- likfit(geozinc,ini=c(.55,224),lik.method="RML",
          trend=~meuse$dist+meuse$elev)
@@ -157,7 +181,7 @@ remlfit$practicalRange
 
 ## Comparison of estimates
 
-```{r}
+```{r, fig.height=4, fig.width=6}
 plot(binzinc,max.dist=3000,xlab="Distance (m)",ylab="Semi-variance",pch=19,cex=.6)
 lines(mlfit,max.dist=3000,lty=3,col="blue")
 lines(remlfit,max.dist=3000,lty=4,col="black")
@@ -165,13 +189,11 @@ legend("bottomright",legend=c("ML","REML"),
        lty=c(1,2),bty="n",col=c("blue","black"),cex=0.5)
 ```
 
-## Prediction for log(zinc)
+# Prediction for log(zinc) by Kriging
 
-We plot the data along with the region within which we shall
-carry out prediction.
+First we plot the data along with the region within which we shall carry out prediction.
 
-\small
-```{r pred1,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+```{r pred2,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.7,fig.width=4.5,eval=T}
 points(geozinc,pt.divide="data.proportional",
        cex.min=0.05,cex.max=.4,xlab="x-coordinate",ylab="y-coordinate",col="green")
 # See points.geodata description for explanation of this function
@@ -179,38 +201,15 @@ abline(h=330000,lty=2);abline(h=332000,lty=2,col="red")
 abline(v=179000,lty=2);abline(v=181000,lty=2,col="red")
 ```
 
-## Prediction for log(zinc)
+We now fit a linear model in distance and elevation to log(zinc). We then form a ``geodata`` object with the residuals as the response.
 
-We plot the data along with the region within which we shall
-carry out prediction.
-
-\small
-```{r pred2,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.7,fig.width=4.5,echo=F,eval=T}
-points(geozinc,pt.divide="data.proportional",
-       cex.min=0.05,cex.max=.4,xlab="x-coordinate",ylab="y-coordinate",col="green")
-# See points.geodata description for explanation of this function
-abline(h=330000,lty=2);abline(h=332000,lty=2,col="red")
-abline(v=179000,lty=2);abline(v=181000,lty=2,col="red")
-```
-
-
-## Prediction for log(zinc)
-
-We fit a linear model in distance and elevation to log(zinc).
-
-We then form a ``geodata`` object with the residuals as the response.
-
-\small
 ```{r pred3,collapse=TRUE,echo=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
 lmfit <- lm(geozinc$data~meuse$dist+meuse$elev)
 lmfit
 detrend <- as.geodata(cbind(geozinc$coords,lmfit$residuals))
 ```
 
-## Prediction for log(zinc)
-
-\scriptsize
-```{r pred4,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.2,fig.width=4.5,echo=TRUE,eval=T}
+```{r pred4,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.7,fig.width=4.5,echo=TRUE,eval=T}
 points(detrend,pt.divide="rank.prop",xlab="x-coordinate",ylab="y-coordinate",cex.min=.1,cex.max=.5)
 abline(h=330000,lty=2)
 abline(h=332000,lty=2)
@@ -218,50 +217,28 @@ abline(v=179000,lty=2)
 abline(v=181000,lty=2)
 ```
 
+Next carry out MLE on the detrended data.
 
-## Prediction for log(zinc)
-
-Carry out MLE on the detrended data.
-
-\scriptsize
 ```{r mle_detrend,collapse=TRUE,echo=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=T}
 mlfit2 <- likfit(detrend,ini=c(.2,224))
 mlfit2
 ```
 
+Finally, we can obtain spatial predictions on a grid, using the parameter estimates from the ML fit to the residuals. Ordinary Kriging is used for this prediction.
 
-## Prediction for log(zinc)
-
-We now obtain spatial predictions on a grid, using the parameter estimates from the ML fit to the residuals.
-
-Ordinary Kriging is used for prediction.
-
-\small
 ```{r krig,collapse=TRUE,echo=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=40),eval=T}
-pred.grid <- expand.grid(seq(179000,181000,l=51),
-             seq(330000,332000,l=51))
+pred.grid <- expand.grid(seq(178600,181400,l=51),
+             seq(329700,333620,l=51))
 kc <- krige.conv(detrend,loc=pred.grid,
       krige=krige.control(obj.m=mlfit2))
 ```
-## Prediction for log(zinc)
 
-Produce an image plot of the predictions, with the data superimposed.
+To view the results produce an image plot of the predictions, with the data superimposed.
 
-\small
-```{r krigplot,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
+```{r krigplot,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7, echo=TRUE,eval=T}
 library(fields)
 image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),
            z=matrix(kc$predict,nrow=51,ncol=51),col=terrain.colors(100),xlab="x-coordinate",ylab="y-coordinate")
-symbols(detrend$coords[,1],detrend$coords[,2],
-  circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
-```
-
-## Prediction for log(zinc)
-
-
-\small
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F,eval=T}
-image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),z=matrix(kc$predict,nrow=51,ncol=51),col=terrain.colors(100),xlab="x-coordinate",ylab="y-coordinate")
 symbols(detrend$coords[,1],detrend$coords[,2],
   circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
 ```
@@ -270,30 +247,63 @@ symbols(detrend$coords[,1],detrend$coords[,2],
 
 We now plot the Kriging standard deviations of the predictions.
 
-\small
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=T,eval=T}
-image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),z=matrix(sqrt(kc$krige.var),nrow=51,ncol=51),col=cm.colors(100),xlab="x-coordinate",ylab="y-coordinate")
-points(detrend$coords[,1],detrend$coords[,2],pch=16)
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7, echo=T,eval=T}
+image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),
+           z=matrix(sqrt(kc$krige.var),nrow=51,ncol=51),
+           col=cm.colors(100),xlab="x-coordinate",ylab="y-coordinate")
+points(detrend$coords[,1],detrend$coords[,2],cex=.5,pch=16)
 ```
 
 The standard deviation is smallest close to the datapoints, as expected.
 
-## Standard deviations of prediction for log(zinc)
+## Another example, using categorical flooding frequency covariate
 
+Now, we'll repeat, but use categorical flooding frequency and distance to the Meuse River as covariates.
 
-\small
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F,eval=T}
-image.plot(x=pred.grid[["Var1"]][1:51],y=unique(pred.grid[["Var2"]]),z=matrix(sqrt(kc$krige.var),nrow=51,ncol=51),col=cm.colors(100),xlab="x-coordinate",ylab="y-coordinate")
-points(detrend$coords[,1],detrend$coords[,2],cex=.5,pch=16)
+```{r}
+# repeat, using distance to Meuse and flood frequency covariates
+# (label objects associated with this version with a "3")
+lmfit3 <- lm(geozinc$data~meuse$dist+meuse$ffreq)
+detrend3 <- as.geodata(cbind(geozinc$coords,lmfit3$residuals))
+mlfit3 <- likfit(detrend3,ini=c(.2,224))
+pred.grid3 <- expand.grid(seq(178600,181400,l=51),
+             seq(329700,333620,l=51))
+kc3 <- krige.conv(detrend3,loc=pred.grid3,
+                  krige=krige.control(obj.m=mlfit3))
 ```
 
+Again, map the residuals from the linear model first, then map predictions and standard deviation.
 
-## log(zinc) modeled with a GAM
+```{r, fig.height=3.5}
+m.sf$resid3 <- lmfit3$residuals
+ggplot() + geom_sf(data = m.sf[,"resid3"], aes(color = resid3)) +
+  theme_void() + scale_color_viridis_c() + labs(title = "Residual", color=NULL)
+```
+
+```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F}
+# plot prediction
+image.plot(x=pred.grid3[["Var1"]][1:51],y=unique(pred.grid3[["Var2"]]),
+           z=matrix(kc3$predict,nrow=51,ncol=51),col=terrain.colors(100),
+           xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend3$coords[,1],detrend3$coords[,2],
+        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
+```
+
+```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F}
+# plot standard deviation
+image.plot(x=pred.grid3[["Var1"]][1:51],y=unique(pred.grid3[["Var2"]]),
+           z=matrix(sqrt(kc3$krige.var),nrow=51,ncol=51),col=cm.colors(100),
+           xlab="x-coordinate",ylab="y-coordinate")
+points(detrend3$coords[,1],detrend3$coords[,2],cex=.5,pch=16)
+```
+
+Notice that there are visible differences in the predicted surface, as compared to the first model, but the standard deviation is similar in the two.
+
+# GAM model for log(zinc)
 
 We now model the log(zinc) surface as linear in distance and elevation, and with the spatial surface modeled with a thin plate regression spline, with the smoothing parameter estimated using REML.
 
 \vspace{.2in}
-\scriptsize
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=TRUE,eval=T}
 library(mgcv)
 library(lattice)
@@ -306,18 +316,12 @@ gam.mod <- gam(lzinc ~ s(x,y, bs="tp") + dist + elev,
            data=zinc.dat, method="REML")
 ```
 
-## log(zinc) modeled with a GAM
-
-
-\scriptsize
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=TRUE,eval=T}
 summary(gam.mod)
 ```
 
 ## GAM output: The fitted distance by elevation surface
 
-\centering
-\scriptsize
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=4.0,fig.width=4.7,echo=TRUE,eval=T}
 vis.gam(gam.mod,theta=30,phi=30)
 ```
@@ -325,11 +329,10 @@ vis.gam(gam.mod,theta=30,phi=30)
 
 ## GAM prediction
 
-\scriptsize
 ```{r gam_tmp,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
 
-pred.grid.gam <- expand.grid(seq(179000,181000,l=51),
-                         seq(330000,332000,l=51))
+pred.grid.gam <- expand.grid(seq(178600,181400,l=51),
+             seq(329700,333620,l=51))
 
 pred.dat.gam <- data.frame(x=pred.grid.gam[,1],
                            y=pred.grid.gam[,2], dist=mean(meuse$dist), elev=mean(meuse$elev))
@@ -339,33 +342,7 @@ zinc.pred.gam.sd<- predict.gam(gam.mod,se.fit=T, pred.dat.gam,type="terms")[[2]]
 
 ```
 
-
-
-## Prediction from GAM
-
-\scriptsize
-```{r ,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
-library(fields)
-image.plot(x=pred.grid.gam[["Var1"]][1:51],
-           y=unique(pred.grid.gam[["Var2"]]),
-           z=matrix(zinc.pred.gam,nrow=51,ncol=51),
-           col=terrain.colors(100),
-           xlab="x-coordinate",
-           ylab="y-coordinate",
-           breaks=seq( -1, 1,,101),
-           axis.args=list( at=c(-1,-0.5,0,0.5,1), labels=c('-1','-0.5','0','0.5','1') ))
-
-symbols( detrend$coords[,1],
-        detrend$coords[,2],
-        circles=(detrend$data-min(detrend$data))/1,
-        add=T,inches=0.04)
-```
-
-## 
-
-\scriptsize
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.5,fig.width=4.7,echo=F,eval=T}
-library(fields)
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,eval=T}
 image.plot(x=pred.grid.gam[["Var1"]][1:51],
            y=unique(pred.grid.gam[["Var2"]]),
            z=matrix(zinc.pred.gam,nrow=51,ncol=51),
@@ -383,22 +360,7 @@ symbols( detrend$coords[,1],
 
 ## Standard deviations of prediction from GAM
 
-\scriptsize
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=T,eval=F}
-
-image.plot(x=pred.grid[["Var1"]][1:51],
-           y=unique(pred.grid[["Var2"]]),
-           z=matrix(zinc.pred.gam.sd,nrow=51,ncol=51),
-           col=cm.colors(100),
-           xlab="x-coordinate",
-           ylab="y-coordinate",breaks=seq(0.03, 0.47,,101),
-           axis.args=list( at=c(0.1,0.2,0.3,0.4), labels=c('0.1','0.2','0.3','0.4') ))
-
-points(detrend$coords[,1],detrend$coords[,2],cex=.5,pch=16)
-```
-
-
-```{r}
+```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7}
 image.plot(x=pred.grid[["Var1"]][1:51],
            y=unique(pred.grid[["Var2"]]),
            z=matrix(zinc.pred.gam.sd,nrow=51,ncol=51),
@@ -410,13 +372,10 @@ points(detrend$coords[,1],detrend$coords[,2],cex=.5,pch=16)
 ```
 
 
+# Meuse analysis using ``geostat`` functions
 
-## Meuse analysis using ``geostat`` functions
+The ``sp`` package functions can make full use of the GIS capabilities of R more readily.
 
-The ``sp`` package functions 
-can make full use of the GIS capabilities of R more readily.
-
-\small
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=T,eval=T}
 
 pal <-  function(n = 9){ brewer.pal(n, "Reds") }
@@ -432,7 +391,6 @@ coordinates(meuse) = ~x+y
 
 ## Zinc: Sampling locations 
 
-\small
 ```{r,collapse=TRUE, fig.height=4.0,fig.width=3.7,echo=T,eval=T}
 plot(meuse1,axes=T)
 plot(rivers,add=T)
@@ -440,7 +398,6 @@ plot(rivers,add=T)
 
 ## log(zinc): Variogram cloud, no trend removed
 
-\small
 ```{r,collapse=TRUE, fig.height=2.5,fig.width=4,echo=T,eval=T}
 library(gstat)
 cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
@@ -450,7 +407,6 @@ plot(cld,ylab="Semi-variance",xlab="Distance (m)")
 
 ## More variograms, with sample sizes
 
-\small
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
 cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
 svgm <- variogram(log(zinc) ~ 1, meuse)
@@ -475,7 +431,6 @@ xyplot(gamma ~ dist | id, d,
 
 ## More variograms
 
-\small
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.0,fig.width=4.0,echo=FALSE,eval=T}
 cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
 svgm <- variogram(log(zinc) ~ 1, meuse)
@@ -502,7 +457,6 @@ xyplot(gamma ~ dist | id, d,
 
 We simulate 100 datasets with random relabeling of points, and then form variograms for each.
 
-\small
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.show="hide",echo=TRUE,eval=T}
 v <- variogram(log(zinc) ~ 1, meuse)
 plot(v, type = 'b', pch = 3,xlab="Distance (m)",ylab="Semi-variance")
@@ -520,7 +474,6 @@ fn()
 
 ## Monte Carlo simulations of semi-variogram 
 
-\small
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.0,fig.width=4.0,echo=FALSE,eval=T}
 v <- variogram(log(zinc) ~ 1, meuse)
 plot(v, type = 'b', pch = 3,xlab="Distance (m)",ylab="Semi-variogram")
@@ -538,7 +491,6 @@ fn()
 
 ## log(zinc): Variogram cloud, detrended
 
-\small
 ```{r,collapse=TRUE, fig.height=2.5,fig.width=4,echo=T,eval=T}
 cld2 <- variogram(log(zinc) ~ dist+elev, meuse, cloud = TRUE)
 plot(cld2,ylab="Semi-variance",xlab="Distance (m)")
@@ -546,7 +498,6 @@ plot(cld2,ylab="Semi-variance",xlab="Distance (m)")
 
 ## log(zinc): Binned variogram, detrended
 
-\small
 ```{r,collapse=TRUE, fig.height=2.5,fig.width=4,echo=T,eval=T}
 gstatbin <- variogram(log(zinc) ~ dist+elev, meuse, width=200)
 plot(gstatbin,ylab="Semi-variance",xlab="Distance (m)")
@@ -557,14 +508,13 @@ plot(gstatbin,ylab="Semi-variance",xlab="Distance (m)")
 We form 4 variograms with data taken from different directions, with 0 and 90 corresponding to north and east, respectively.
 
 Note that 0 is the same as 180.
-\small
+
 ```{r,collapse=TRUE,echo=T,eval=T}
 dircld <- variogram(log(zinc)~dist+elev, meuse, alpha=c(0,45,90,135))
 ```
 
 ## Zinc: Directional variogram with linear trend removed
 
-\small
 ```{r,collapse=TRUE, fig.height=2.8,fig.width=4,echo=T,eval=T}
 plot(dircld,xlab="Distance (m)",ylab="Semi-variance")
 ```
@@ -573,7 +523,6 @@ plot(dircld,xlab="Distance (m)",ylab="Semi-variance")
 
 We examine scatterplots of points within different distances of each other. This is another way of assessing whether spatial dependence exists.
 
-\small
 ```{r,collapse=TRUE, fig.height=5.8,fig.width=6,echo=T,eval=T}
 hscat(log(zinc)~1, meuse, c(0, 80, 120, 250, 500, 1000),cex=.1)
 ```
@@ -589,16 +538,17 @@ See
 
 - ``vgm`` generates variogram models
 
-### SPDE model 
 
-We illustrate kriging via SPDE  using data on log(zinc) levels in the ``meuse`` dataset.
+# SPDE model 
+
+Next we illustrate kriging via SPDE using data on log(zinc) levels in the ``meuse`` dataset.
 
 ```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=TRUE}
 library(INLA)
 zincdf = data.frame(y = log(meuse$zinc), locx = meuse$x, locy = meuse$y, dist=meuse$dist, elev=meuse$elev)
 ```
 
-#### Mesh construction
+## Mesh construction
 
 The mesh is the discretization of the domain (study area). The domain is divided up into small triangles.
 
@@ -730,7 +680,7 @@ cat(cbind(mlfit$beta[i],sqrt(mlfit$beta.var[i,i])),res$summary.fixed[i,1],res$su
 }
 ```
 
-#### Visual summarization
+## Visual summarization
 
 ```{r}
 tmp = inla.tmarginal(function(x) x, res$marginals.fixed[[1]]) 
@@ -792,6 +742,32 @@ quilt.plot(x=zincdf$locx,y=zincdf$locy,z=res$summary.fitted.values$mean[1:nrow(z
            zlim = range(zincdf$y), cex.axis=.5)
 ```
 
+Plot using the same themes as we used for Kriging and GAM.
 
+```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7}
+# plot prediction
+image.plot(x=sort(unique(zincdf$locx)),
+           y=sort(unique(zincdf$locy)),
+           z=matrix(res$summary.fitted.values$mean[1:nrow(zincdf)],
+                    nrow = length(unique(zincdf$locx)),
+                    ncol = length(unique(zincdf$locy))),
+           col=terrain.colors(100),
+           xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend3$coords[,1],detrend3$coords[,2],
+        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
+```
+
+```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7}
+# plot standard deviation
+image.plot(x=sort(unique(zincdf$locx)),
+           y=sort(unique(zincdf$locy)),
+           z=matrix(res$summary.fitted.values$sd[1:nrow(zincdf)],
+                    nrow = length(unique(zincdf$locx)),
+                    ncol = length(unique(zincdf$locy))),
+           col=terrain.colors(100),
+           xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend3$coords[,1],detrend3$coords[,2],
+        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
+```
 
 
