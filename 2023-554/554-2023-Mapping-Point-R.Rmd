@@ -638,7 +638,7 @@ We specify PC priors for the spatial SD and the spatial range.
 ```{r}
 prior.median.sd = .07; prior.median.range = 2000
 #  diff(range(mesh$loc[, 1]))/2 for range
-# and sd(df$y)/10 for sd
+# and sd(df$y)/10 for sd 
 # These are somewhat arbitrary, in general, thought is required!
 spde = inla.spde2.pcmatern(mesh, alpha =2, prior.range = c(prior.median.range, 0.5), prior.sigma = c(prior.median.sd, 0.5), constr = T)
 ```
