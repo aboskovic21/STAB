@@ -243,27 +243,6 @@ symbols(detrend$coords[,1],detrend$coords[,2],
   circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
 ```
 
-However, since we're predicting the residuals, to get back to the original task of predicting log(zinc), we can add this value back onto our predictions from `lmfit`, which yields the following:
-
-```{r}
-# now use data coordinates as prediction locations
-kc_datalocs <- krige.conv(detrend, locations = detrend$coords,
-                          krige=krige.control(obj.m=mlfit))
-
-# add spatial prediction of residual to linear model prediction
-meuse$pred_lm <- predict(lmfit)
-meuse$pred_resid <- kc_datalocs$predict
-meuse$pred_logzinc <- meuse$pred_lm + meuse$pred_resid
-```
-
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7, echo=TRUE,eval=T}
-# plot results
-m.sf.pred <- sf::st_as_sf(meuse, coords = c("x","y"))
-ggplot() + geom_sf(data = m.sf.pred[,"pred_logzinc"], aes(color = pred_logzinc)) +
-  theme_void() + scale_color_viridis_c() +
-  labs(title = "Predicted log(Zinc)", color=NULL)
-```
-
 ## Standard deviations of prediction for log(zinc)
 
 We now plot the Kriging standard deviations of the predictions.
@@ -279,46 +258,63 @@ The standard deviation is smallest close to the datapoints, as expected.
 
 ## Another example, using categorical flooding frequency covariate
 
-Now, we'll repeat, but use categorical flooding frequency and distance to the Meuse River as covariates.
+Now, we'll repeat, but use categorical flooding frequency and distance to the Meuse River as covariates. These two covariates are available for a grid, in the `meuse.grid` data object. This means we can predict log(Zinc) for a grid, using the sum of the linear model fit and the interpolated spatial field.
+
+First take a look at the grid covariates.
 
 ```{r}
-# repeat, using distance to Meuse and flood frequency covariates
+library(sp)
+data(meuse.grid)
+coordinates(meuse.grid) = ~x+y
+proj4string(meuse.grid) <- CRS("+init=epsg:28992")
+gridded(meuse.grid) = TRUE
+```
+
+```{r, fig.height=3}
+spplot(meuse.grid["ffreq"])
+```
+
+```{r, fig.height=3}
+spplot(meuse.grid["dist"])
+```
+
+Now proceed with Kriging for log(Zinc).
+
+```{r}
 # (label objects associated with this version with a "3")
-lmfit3 <- lm(geozinc$data~meuse$dist+meuse$ffreq)
+lmdata <- data.frame(logzinc=geozinc$data, dist=meuse$dist, ffreq=meuse$ffreq)
+lmfit3 <- lm(logzinc~dist+ffreq, data=lmdata)
 detrend3 <- as.geodata(cbind(geozinc$coords,lmfit3$residuals))
 mlfit3 <- likfit(detrend3,ini=c(.2,224))
-pred.grid3 <- expand.grid(seq(178600,181400,l=51),
-             seq(329700,333620,l=51))
+
+# get meuse.grid and expand to all combinations
+data(meuse.grid)
+pred.grid3 <- expand.grid(sort(unique(meuse.grid$x)),
+                          sort(unique(meuse.grid$y)))
+
+# kriging
 kc3 <- krige.conv(detrend3,loc=pred.grid3,
                   krige=krige.control(obj.m=mlfit3))
+
+# merge linear predictions onto grid
+pred_lm <- meuse.grid[, c("x", "y", "dist", "ffreq")]
+pred_lm$pred_lm <- predict(lmfit3, newdata = pred_lm)
+pred_resid <- data.frame(pred_resid = kc3$predict, x = pred.grid3$Var1,
+                          y = pred.grid3$Var2)
+pred_logzinc <- merge(pred_resid, pred_lm, by = c("x","y"), all=T)
+pred_logzinc$pred_logzinc <- pred_logzinc$pred_lm + pred_logzinc$pred_resid
+pred_logzinc <- pred_logzinc %>% arrange(y,x)
 ```
 
-Again, map the residuals from the linear model first, then map predictions and standard deviation.
-
-```{r, fig.height=3.5}
-m.sf$resid3 <- lmfit3$residuals
-ggplot() + geom_sf(data = m.sf[,"resid3"], aes(color = resid3)) +
-  theme_void() + scale_color_viridis_c() + labs(title = "Residual", color=NULL)
-```
-
-```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F}
+```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7}
 # plot prediction
-image.plot(x=pred.grid3[["Var1"]][1:51],y=unique(pred.grid3[["Var2"]]),
-           z=matrix(kc3$predict,nrow=51,ncol=51),col=terrain.colors(100),
+image.plot(x=unique(pred.grid3[["Var1"]]),y=unique(pred.grid3[["Var2"]]),
+           z=matrix(pred_logzinc$pred_logzinc,nrow=78,ncol=104),col=terrain.colors(100),
            xlab="x-coordinate",ylab="y-coordinate")
 symbols(detrend3$coords[,1],detrend3$coords[,2],
         circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
 ```
 
-```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7,echo=F}
-# plot standard deviation
-image.plot(x=pred.grid3[["Var1"]][1:51],y=unique(pred.grid3[["Var2"]]),
-           z=matrix(sqrt(kc3$krige.var),nrow=51,ncol=51),col=cm.colors(100),
-           xlab="x-coordinate",ylab="y-coordinate")
-points(detrend3$coords[,1],detrend3$coords[,2],cex=.5,pch=16)
-```
-
-Notice that there are visible differences in the predicted surface, as compared to the first model, but the standard deviation is similar in the two.
 
 # GAM model for log(zinc)
 
