@@ -15,7 +15,7 @@ editor_options:
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 library(knitr)
-opts_chunk$set(collapse=TRUE, fig.align='center', warning=FALSE,message=FALSE,cache=FALSE)
+opts_chunk$set(collapse=TRUE, fig.align='center', warning=FALSE,message=FALSE,cache=FALSE, tidy=T)
 ```
 
 # Overview
@@ -246,23 +246,23 @@ symbols(detrend$coords[,1],detrend$coords[,2],
 However, since we're predicting the residuals, to get back to the original task of predicting log(zinc), we can add this value back onto our predictions from `lmfit`, which yields the following:
 
 ```{r}
-beta_0 <- lmfit$coefficients[1] # intercept
-beta_1 <- lmfit$coefficients[2] # distance
-beta_2 <- lmfit$coefficients[3] # elevation
+# now use data coordinates as prediction locations
+kc_datalocs <- krige.conv(detrend, locations = detrend$coords,
+                          krige=krige.control(obj.m=mlfit))
 
-small_grid <- cbind(meuse$x, meuse$y) %>% as.data.frame()
-kc_small <- krige.conv(detrend,loc=small_grid,
-krige=krige.control(obj.m=mlfit2))
-
-pred <- beta_0 + beta_1 * meuse$dist + beta_2 * meuse$elev + kc_small$predict
-
-image.plot(x=sort(unique(small_grid[["V1"]])[1:144]),
-           y=sort(unique(small_grid[["V2"]])[1:144]),
-           z=matrix(pred[1:144],nrow=12,ncol=12),col=terrain.colors(100),xlab="x-coordinate",ylab="y-coordinate")
-symbols(detrend$coords[,1],detrend$coords[,2],
-  circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
+# add spatial prediction of residual to linear model prediction
+meuse$pred_lm <- predict(lmfit)
+meuse$pred_resid <- kc_datalocs$predict
+meuse$pred_logzinc <- meuse$pred_lm + meuse$pred_resid
 ```
 
+```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7, echo=TRUE,eval=T}
+# plot results
+m.sf.pred <- sf::st_as_sf(meuse, coords = c("x","y"))
+ggplot() + geom_sf(data = m.sf.pred[,"pred_logzinc"], aes(color = pred_logzinc)) +
+  theme_void() + scale_color_viridis_c() +
+  labs(title = "Predicted log(Zinc)", color=NULL)
+```
 
 ## Standard deviations of prediction for log(zinc)
 
@@ -618,7 +618,7 @@ The observed data lie on the vertices.
 ```{r, message=FALSE, collapse=TRUE, tidy=TRUE,tidy.opts=list(width.cutoff=50),eval=TRUE}
 A = inla.spde.make.A(mesh=mesh, loc=data.matrix(zincdf[ , c('locx', 'locy')]))
 dim(A)
-table(as.numeric(A))
+# table(as.numeric(A))
 # table(rowSums(A > 0)) # 155 values of 1
 # Every point is at a mesh vertex, so each line on the projector
 # matrix has exactly one non-zero mesh element A[1,]
@@ -762,43 +762,3 @@ And finally, we plot the fitted values.
 quilt.plot(x=zincdf$locx,y=zincdf$locy,z=res$summary.fitted.values$mean[1:nrow(zincdf)],nx=40,ny=40, col = plasma(101), main="Fitted values", 
            zlim = range(zincdf$y), cex.axis=.5)
 ```
-
-Plot using the same themes as we used for Kriging and GAM.
-
-```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7}
-# plot prediction
-image.plot(x=sort(unique(zincdf$locx)),
-           y=sort(unique(zincdf$locy)),
-           z=matrix(res$summary.fitted.values$mean[1:nrow(zincdf)],
-                    nrow = length(unique(zincdf$locx)),
-                    ncol = length(unique(zincdf$locy))),
-           col=terrain.colors(100),
-           xlab="x-coordinate",ylab="y-coordinate")
-symbols(detrend3$coords[,1],detrend3$coords[,2],
-        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
-
-image.plot(x=sort(unique(zincdf$locx)),
-           y=sort(unique(zincdf$locy)),
-           z=matrix(res$summary.fitted.values$sd[1:nrow(zincdf)],
-                    nrow = length(unique(zincdf$locx)),
-                    ncol = length(unique(zincdf$locy))),
-           col=terrain.colors(100),
-           xlab="x-coordinate",ylab="y-coordinate")
-symbols(detrend3$coords[,1],detrend3$coords[,2],
-        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
-```
-
-```{r, collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=3.8,fig.width=4.7}
-# plot standard deviation
-image.plot(x=sort(unique(zincdf$locx)),
-           y=sort(unique(zincdf$locy)),
-           z=matrix(res$summary.fitted.values$sd[1:nrow(zincdf)],
-                    nrow = length(unique(zincdf$locx)),
-                    ncol = length(unique(zincdf$locy))),
-           col=terrain.colors(100),
-           xlab="x-coordinate",ylab="y-coordinate")
-symbols(detrend3$coords[,1],detrend3$coords[,2],
-        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
-```
-
-
