@@ -243,6 +243,27 @@ symbols(detrend$coords[,1],detrend$coords[,2],
   circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
 ```
 
+However, since we're predicting the residuals, to get back to the original task of predicting log(zinc), we can add this value back onto our predictions from `lmfit`, which yields the following:
+
+```{r}
+beta_0 <- lmfit$coefficients[1] # intercept
+beta_1 <- lmfit$coefficients[2] # distance
+beta_2 <- lmfit$coefficients[3] # elevation
+
+small_grid <- cbind(meuse$x, meuse$y) %>% as.data.frame()
+kc_small <- krige.conv(detrend,loc=small_grid,
+krige=krige.control(obj.m=mlfit2))
+
+pred <- beta_0 + beta_1 * meuse$dist + beta_2 * meuse$elev + kc_small$predict
+
+image.plot(x=sort(unique(small_grid[["V1"]])[1:144]),
+           y=sort(unique(small_grid[["V2"]])[1:144]),
+           z=matrix(pred[1:144],nrow=12,ncol=12),col=terrain.colors(100),xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend$coords[,1],detrend$coords[,2],
+  circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
+```
+
+
 ## Standard deviations of prediction for log(zinc)
 
 We now plot the Kriging standard deviations of the predictions.
@@ -749,6 +770,16 @@ Plot using the same themes as we used for Kriging and GAM.
 image.plot(x=sort(unique(zincdf$locx)),
            y=sort(unique(zincdf$locy)),
            z=matrix(res$summary.fitted.values$mean[1:nrow(zincdf)],
+                    nrow = length(unique(zincdf$locx)),
+                    ncol = length(unique(zincdf$locy))),
+           col=terrain.colors(100),
+           xlab="x-coordinate",ylab="y-coordinate")
+symbols(detrend3$coords[,1],detrend3$coords[,2],
+        circles=(detrend3$data-min(detrend3$data))/1,add=T,inches=0.04)
+
+image.plot(x=sort(unique(zincdf$locx)),
+           y=sort(unique(zincdf$locy)),
+           z=matrix(res$summary.fitted.values$sd[1:nrow(zincdf)],
                     nrow = length(unique(zincdf$locx)),
                     ncol = length(unique(zincdf$locy))),
            col=terrain.colors(100),
