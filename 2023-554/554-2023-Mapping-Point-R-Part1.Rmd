@@ -42,7 +42,7 @@ collected in a flood plain of the river Meuse, near the village Stein in the Sou
 Heavy metal concentrations are bulk sampled from an area of
 approximately $28 \mbox{km} \times 39 \mbox{km}$.
 
-The Meuse data are in a variety of packages. The version in the geoR library are not a spatial object, but can be used with likelihood and Bayes methods.
+The Meuse data are in a variety of packages. The version in the `geoR` library are not a spatial object, but can be used with likelihood and Bayes methods.
 
 # Meuse analysis using ``geostat`` functions
 
@@ -55,6 +55,8 @@ library(viridis)
 library(geoR)
 data("meuse")
 library(sp)
+library(INLA)
+
 pal <-  function(n = 9){ brewer.pal(n, "Reds") }
 data(meuse)
 coords <- SpatialPoints(meuse[,c("x","y")])
@@ -158,37 +160,13 @@ xyplot(gamma ~ dist | id, d,
 )
 ```
 
-## More variograms
-
-```{r}
-cld <- variogram(log(zinc) ~ 1, meuse, cloud = TRUE)
-svgm <- variogram(log(zinc) ~ 1, meuse)
-d <- data.frame(gamma = c(cld$gamma, svgm$gamma),
-    dist = c(cld$dist, svgm$dist),
-    id = c(rep("cloud", nrow(cld)), rep("sample variogram", nrow(svgm)))
-    )
-xyplot(gamma ~ dist | id, d,
-    scales = list(y = list(relation = "free", 
-	  #ylim = list(NULL, c(-.005,0.7)))),
-	  limits = list(NULL, c(-.005,0.7)))),
-    layout = c(1, 2), as.table = TRUE,
-    panel = function(x,y, ...) {
-        if (panel.number() == 2)
-            ltext(x+10, y, svgm$np, adj = c(0,0.5),cex=.4) #$
-        panel.xyplot(x,y,...)
-    },
-    xlim = c(0, 1590),
-    cex = .5, pch = 3
-)
-```
-
 ## Monte Carlo simulations of semi-variogram 
 
 We simulate 100 datasets with random relabeling of points, and then form variograms for each.
 
 ```{r}
 v <- variogram(log(zinc) ~ sqrt(meuse$dist)+as.factor(meuse$ffreq), meuse)
-plot(v, type = 'b', pch = 3,xlab="Sqrt Distance (m)",ylab="Semi-variance")
+plot(v, type = 'b', pch = 3,xlab="Distance (m)",ylab="Semi-variance")
 fn = function(n = 100) {
         for (i in 1:n) {
            meuse$random = sample(meuse$zinc)
@@ -203,35 +181,6 @@ fn()
 
 Monte Carlo envelopes under no spatial dependence - it is clear there is dependence here.
 
-```{r}
-v <- variogram(log(zinc) ~ sqrt(meuse$dist)+as.factor(meuse$ffreq), meuse)
-plot(v, type = 'b', pch = 3,xlab="Sqrt Distance (m)",ylab="Semi-variogram")
-fn = function(n = 100) {
-        for (i in 1:n) {
-           meuse$random = sample(meuse$zinc)
-           v = variogram(log(random) ~ 1, meuse)
-           trellis.focus("panel", 1, 1, highlight = FALSE)
-           llines(v$dist, v$gamma, col = 'grey')
-           trellis.unfocus()
-        }
-}
-fn()
-```
-
-## log(zinc): Variogram cloud, detrended
-
-```{r}
-cld2 <- variogram(log(zinc) ~ sqrt(meuse$dist)+as.factor(ffreq), meuse, cloud = TRUE)
-plot(cld2,ylab="Semi-variance",xlab="Sqrt Distance (m)")
-```
-
-## log(zinc): Binned variogram, detrended
-
-```{r}
-gstatbin <- variogram(log(zinc) ~ sqrt(meuse$dist)+as.factor(ffreq), meuse, width=200)
-plot(gstatbin,ylab="Semi-variance",xlab="Distance (m)")
-```
-
 ## Directional variogram with linear trend removed
 
 We form 4 variograms with data taken from different directions, with 0 and 90 corresponding to north and east, respectively.
@@ -243,7 +192,7 @@ dircld <- variogram(log(zinc)~sqrt(meuse$dist)+as.factor(ffreq), meuse, alpha=c(
 ```
 
 ```{r}
-plot(dircld,xlab="Sqrt Distance (m)",ylab="Semi-variance")
+plot(dircld,xlab="Distance (m)",ylab="Semi-variance")
 ```
 
 ## Other capabilities in ``gstat``
@@ -267,10 +216,7 @@ zmat <- matrix(cbind(meuse$x,meuse$y,log(meuse$zinc)),
 geozinc <- as.geodata(zmat,coords.col=c(1,2),data.col=c(3))
 ```
 
-
-## log(zinc) Variogram
-
-First we will be assuming a spatial model on the residuals with ``ffreq`` and ``sdist`` in the model. Fit this initial linear model, and view the residuals by histogram and map.
+First we will be assuming a spatial model on the residuals with ``ffreq`` and ``sqrt(dist)`` in the model. Fit this initial linear model, and view the residuals by histogram and map.
 
 ```{r}
 LSmod <- lm(log(meuse$zinc)~sqrt(meuse$dist)+as.factor(meuse$ffreq))
@@ -281,7 +227,7 @@ hist(LSresid,nclass=25)
 ```{r}
 m.sf$resid <- LSresid
 ggplot() + geom_sf(data = m.sf[,"resid"], aes(color = resid)) +
-  theme_void() + scale_color_viridis_c() + labs(title = "Residual", color=NULL)
+  theme_void() + scale_color_viridis_c() + labs(title = "Residuals from Linear Model", color=NULL)
 ```
 
 ## Moran's I
@@ -296,24 +242,6 @@ diag(dists.inv) <- 0
 dists.inv[1:5, 1:5]
 
 Moran.I(LSresid, dists.inv)
-```
-
-
-## Variogram Cloud
-
-Variogram cloud for log zinc residuals, after taking out ``ffreq`` and ``dist``.
-
-```{r}
-cloudzinc <- variog(geozinc,option="cloud", trend=~sqrt(meuse$dist)+as.factor(meuse$ffreq))
-plot(cloudzinc,ylab="Semi-variance",xlab="Sqrt Distance (m)",col="grey",cex=.4)
-```
-
-## Binned Variogram
-
-```{r, fig.height=3.5, fig.width=5}
-binzinc <- variog(geozinc,uvec=seq(0,5000,250),
-           trend=~sqrt(meuse$dist)+as.factor(meuse$ffreq))
-plot(binzinc,ylab="Semi-variance",xlab="Sqrt Distance (m)",cex=.5,col="blue")
 ```
 
 ## Maximum likelihood for log(zinc)
@@ -365,11 +293,14 @@ cat(cbind(mlfit$beta[i],sqrt(mlfit$beta.var[i,i]),remlfit$beta[i],sqrt(remlfit$b
 ## Comparison of estimates
 
 ```{r, fig.height=4, fig.width=6}
-plot(binzinc,max.dist=3000,xlab="Sqrt Distance (m)",ylab="Semi-variance",pch=19,cex=.6)
-lines(mlfit,max.dist=3000,lty=3,col="blue")
-lines(remlfit,max.dist=3000,lty=4,col="black")
+binzinc <- variog(geozinc,uvec=seq(0,5000,250),
+           trend=~sqrt(meuse$dist)+as.factor(meuse$ffreq))
+
+plot(binzinc,max.dist=3000,xlab="Distance (m)",ylab="Semi-variance",pch=19,cex=.6)
+lines(mlfit,max.dist=3000,lty=1,col="blue")
+lines(remlfit,max.dist=3000,lty=1,col="red")
 legend("bottomright",legend=c("ML","REML"),
-       lty=c(1,2),bty="n",col=c("blue","black"),cex=0.5)
+       lty=c(1,1),bty="n",col=c("blue","red"),cex=1.0)
 ```
 
 # Prediction for log(zinc) by Kriging
@@ -382,6 +313,8 @@ lmdata <- data.frame(logzinc=geozinc$data, sqrtdist=sqrt(meuse$dist),
 lmfit <- lm(logzinc~sqrtdist+ffreq, data=lmdata)
 lmfit
 detrend <- as.geodata(cbind(geozinc$coords,lmfit$residuals))
+
+likfit(geozinc, ini = c(1000, 50))
 ```
 
 We can obtain spatial predictions on a grid, using the parameter estimates from the ML fit.
@@ -420,6 +353,20 @@ image.plot(x=unique(pred.grid[["Var1"]]),y=unique(pred.grid[["Var2"]]),
            xlab="x-coordinate",ylab="y-coordinate")
 symbols(detrend$coords[,1],detrend$coords[,2],
         circles=(detrend$data-min(detrend$data))/1,add=T,inches=0.04)
+
+# library(sf)
+# df <- st_as_sf(zinc.dat, coords=c("x", "y"))
+# ggplot() +
+#   geom_sf(data = df, col = "black", fill = NA) +
+#   theme_bw() +
+#   coord_sf() +
+#   xlab("") +
+#   ylab("") +
+#   theme(legend.title = element_blank(),
+#         panel.grid = element_blank(),
+#         panel.border = element_blank(),
+#         axis.ticks = element_blank(),
+#         axis.text = element_blank())
 ```
 
 ## Standard deviations of prediction for log(zinc)
@@ -458,13 +405,6 @@ gam.mod <- gam(lzinc ~ s(x,y, bs="tp") + sqrtdist + ffreq,
 ```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), echo=TRUE,eval=T}
 summary(gam.mod)
 ```
-
-## GAM output: The fitted distance by elevation surface
-
-```{r,collapse=TRUE,tidy=TRUE,tidy.opts=list(width.cutoff=50), fig.height=4.0,fig.width=4.7,echo=TRUE,eval=T}
-vis.gam(gam.mod,theta=30,phi=30)
-```
-
 
 ## GAM prediction
 
@@ -509,5 +449,107 @@ symbols(detrend$coords[,1],
         add=T,inches=0.04)
 ```
 
+# SPDE Model for log(zinc)
 
+We not create a Bayesian SPDE model for log(zinc).
+
+```{r}
+zincdf <- zinc.dat %>% 
+  dplyr::select(y = lzinc,
+                locx = x,
+                locy = y,
+                sqrtdist = sqrtdist,
+                ffreq = ffreq)
+
+# Create mesh
+max.edge <- 200
+mesh <- inla.mesh.2d(
+  loc = zincdf[, c("locx", "locy")],
+  offset = c(100, 500), max.edge = c(max.edge, max.edge *
+    3)
+)
+```
+
+We can visualize the mesh we created as follows:
+
+```{r}
+plot(mesh, asp = 1, main = "")
+points(zincdf[, c("locx", "locy")], col = "red", cex = 0.4)
+```
+
+Next, we create an $A$ matrix and the stack, which we need in order to define our model.
+
+```{r}
+A <- inla.spde.make.A(mesh = mesh, loc = data.matrix(zincdf[, c("locx", "locy")]
+                                                     )
+                      )
+
+# Define X matrix
+Xcov <- data.frame(intercept = 1, 
+                   sqrtdist = zincdf$sqrtdist)
+Xcov <- as.matrix(Xcov)
+colnames(Xcov)
+
+# Create the stack
+stack <- inla.stack(
+  tag = "est",
+
+  # - Name (nametag) of the stack
+  # - Here: est for estimating
+  data = list(y = zincdf$y),
+  effects = list(
+    # - The Model Components
+    s = 1:mesh$n,
+    Xcov = Xcov
+  ),
+  # - The second is all fixed effects
+  A = list(A, 1)
+  # - First projector matrix is for 's'
+  # - second is for 'fixed effects'
+)
+```
+
+Next, we can set a prior and define our model.
+
+```{r}
+# Define a prior
+prior.median.sd <- 0.07
+prior.median.range <- 2000
+spde <- inla.spde2.pcmatern(mesh, alpha = 2, prior.range = c(
+  prior.median.range,
+  0.5
+), prior.sigma = c(prior.median.sd, 0.5), constr = T)
+
+# Define the model
+formula <- y ~ -1 + Xcov + f(s, model = spde)
+prior.median.gaus.sd <- 1 # Prior for measurement error
+family <- "gaussian"
+control.family <- list(hyper = list(prec = list(
+  prior = "pc.prec",
+  fixed = FALSE, param = c(
+    prior.median.gaus.sd,
+    0.5
+  )
+)))
+```
+
+Finally, we can fit our model:
+
+```{r}
+res <- inla(formula,
+  data = inla.stack.data(stack, spde = spde),
+  control.predictor = list(A = inla.stack.A(stack), compute = T),
+  # compute=T to get posterior for fitted values
+  family = family,
+  control.family = control.family,
+  # control.compute = list(config=T, dic=T, cpo=T, waic=T),
+  # if Model comparisons wanted
+  control.inla = list(int.strategy = "eb"),
+  # - faster computation
+  # control.inla = list(int.strategy='grid'),
+  # - More accurate integration over hyper-parameters
+  verbose = F
+)
+summary(res)
+```
 
