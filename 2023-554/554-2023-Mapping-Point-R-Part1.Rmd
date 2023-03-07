@@ -451,7 +451,7 @@ symbols(detrend$coords[,1],
 
 # SPDE Model for log(zinc)
 
-We not create a Bayesian SPDE model for log(zinc).
+We now create a Bayesian SPDE model for log(zinc).
 
 ```{r}
 zincdf <- zinc.dat %>% 
@@ -480,9 +480,7 @@ points(zincdf[, c("locx", "locy")], col = "red", cex = 0.4)
 Next, we create an $A$ matrix and the stack, which we need in order to define our model.
 
 ```{r}
-A <- inla.spde.make.A(mesh = mesh, loc = data.matrix(zincdf[, c("locx", "locy")]
-                                                     )
-                      )
+A <- inla.spde.make.A(mesh = mesh, loc = data.matrix(zincdf[, c("locx", "locy")]))
 
 # Define X matrix
 Xcov <- data.frame(intercept = 1, 
@@ -552,4 +550,3 @@ res <- inla(formula,
 )
 summary(res)
 ```
-
