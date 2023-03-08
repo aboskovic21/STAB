@@ -550,3 +550,45 @@ res <- inla(formula,
 )
 summary(res)
 ```
+
+Finally, we can plot the means and standard deviations of our estimates.
+
+```{r}
+local.plot.field <- function(field, mesh, xlim = c(
+                               177000,
+                               183000
+                             ), ylim = c(329000, 334000), ...) {
+  stopifnot(length(field) == mesh$n)
+  # - error when using the wrong mesh
+  proj <- inla.mesh.projector(mesh,
+    xlim = xlim, ylim = ylim,
+    dims = c(300, 300)
+  )
+  # Project from the mesh onto a 300x300 plotting
+  # grid using whatever is fed to the function. For
+  # example, it could be the posterior mean, or draw
+  # from the posterior, or fitted values
+  field.proj <- inla.mesh.project(proj, field)
+  # Do the projection by taking a convex combination
+  # (with up to 3 elements) from the values on the
+  # vertices
+  image.plot(list(x = proj$x, y = proj$y, z = field.proj),
+    xlim = xlim, ylim = ylim, col = plasma(101),
+    ...
+  )
+}
+
+# Plot mean
+local.plot.field(res$summary.random[["s"]][["mean"]],
+  mesh,
+  cex.axis = 0.5
+)
+lines(178000 + c(-0.5, 0.5) * (res$summary.hyperpar[
+  2,
+  "0.5quant"
+]), c(333500, 333500), lwd = 3) # add on the estimated range
+
+# Plot SD
+local.plot.field(res$summary.random$s$sd, mesh, cex.axis = 0.5)
+```
+
