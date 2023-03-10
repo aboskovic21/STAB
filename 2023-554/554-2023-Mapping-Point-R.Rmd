@@ -349,7 +349,7 @@ meuse.grid$pred.S <- meuse.grid$pred - (kc_pred$beta.est[1] + kc_pred$beta.est[2
                                           kc_pred$beta.est[4]*(as.numeric(meuse.grid$ffreq == "3")))
 ```
 
-To plot these results, first great an `sf` object from our grid, then use ggplot. 
+To plot these results, first create an `sf` object from our grid, then use ggplot. 
 
 ```{r}
 meuse.grid.sf <- st_as_sf(meuse.grid, coords = c("x","y"))
