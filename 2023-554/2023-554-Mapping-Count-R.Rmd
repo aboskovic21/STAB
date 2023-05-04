@@ -34,6 +34,7 @@ library(ggplot2)
 library(ggridges)
 library(INLA)
 library(sf)
+library(spdep)
 ```
 
 We will fit a number of models to the Scottish lip cancer data, but first access the data.
@@ -82,6 +83,33 @@ We can look at the first part of the spatial data frame:
 
 ```{r}
 head(smap)
+```
+
+We can plot the areas within Scotland as follows:
+
+```{r}
+cent <- getSpPPolygonsLabptSlots(scotland$spatial.polygon)
+cols <- rainbow(min(10,
+                    dim(smap)[1]))
+admin1.mat <- poly2nb(SpatialPolygons(scotland$spatial.polygon@polygons))
+admin1.mat <- nb2mat(admin1.mat, zero.policy = TRUE)
+colnames(admin1.mat) <- rownames(admin1.mat) <- paste0("admin1_", 1:dim(admin1.mat)[1])
+
+### Admin1 neighbors ####
+plot(smap, col = cols, border = F, axes = F,)
+  for(i in 1:dim(cent)[1]){
+    neighbs <- which(admin1.mat[i,] != 0)
+    if(length(neighbs) != 0){
+      for(j in 1:length(neighbs)){
+        ends <- cent[neighbs,]
+        segments(x0 = cent[i, 1],
+                 y0 = cent[i, 2],
+                 x1 = cent[neighbs[j], 1],
+                 y1 = cent[neighbs[j], 2],
+                 col = 'black')
+      }
+    }
+  }
 ```
 
 Now for the map.
@@ -550,6 +578,40 @@ smap$fit2fitted <- scotland.fit2$summary.fitted.values$`0.5quant`
 plot(smap["fit2fitted"], pal = pal, nbreaks=8, breaks = "equal")
 ```
 
+```{r}
+leglabs <- function(vec, under = "under", over = "over", between = "-") {
+  x <- vec
+  lx <- length(x)
+  if (lx < 3) {
+    stop("vector too short")
+  }
+  res <- character(lx - 1)
+  res[1] <- paste(under, x[2])
+  for (i in 2:(lx - 2)) res[i] <- paste(x[i], between, x[i + 1])
+  res[lx - 1] <- paste(over, x[lx - 1])
+  res
+}
+
+plotvar <- smap$SMR # variable we want to map: SMR
+nclr <- 8
+plotclr <- brewer.pal(nclr, "Reds")
+brks <- round(quantile(plotvar, probs = seq(0, 1, 1/(nclr))), digits = 1)
+colornum <- findInterval(plotvar, brks, all.inside = T)
+colcode <- plotclr[colornum]
+
+ggplot(smap) +
+  geom_sf(aes(fill = colcode)) +
+  theme(
+    legend.title = element_blank(),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text = element_blank()
+  ) +
+  theme(legend.position = "right") +
+  scale_fill_manual(values = rev(plotclr), 
+                    labels = rev(leglabs(round(brks, digits = 1)))) +
+  coord_sf()
+```
 
 
 
