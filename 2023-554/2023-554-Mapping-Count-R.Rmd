@@ -95,8 +95,7 @@ admin1.mat <- poly2nb(SpatialPolygons(scotland$spatial.polygon@polygons))
 admin1.mat <- nb2mat(admin1.mat, zero.policy = TRUE)
 colnames(admin1.mat) <- rownames(admin1.mat) <- paste0("admin1_", 1:dim(admin1.mat)[1])
 
-### Admin1 neighbors ####
-plot(smap, col = cols, border = F, axes = F,)
+plot(smap$geometry, col = cols, border = F, axes = F,)
   for(i in 1:dim(cent)[1]){
     neighbs <- which(admin1.mat[i,] != 0)
     if(length(neighbs) != 0){
